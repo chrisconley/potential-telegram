@@ -114,6 +114,24 @@ Extract different measurements based on event properties. For example, meter req
 
 All specs use primitives-only types (strings, numbers, time) with JSON serialization. Includes Go reference implementation in `internal/`.
 
+### Precision and Financial Calculations
+
+Quantities in metering-spec are represented as **decimal strings** (e.g., `"123.45"`) to avoid floating-point precision issues in JSON serialization.
+
+For **billing and financial use cases**, implementations SHOULD:
+- Use exact decimal arithmetic (no floating point)
+- Implement consistent rounding rules (recommend: banker's rounding / half-to-even)
+- Ensure reproducible calculations (same inputs → same outputs)
+- Guarantee allocation totals when splitting values (sum of parts = original whole)
+
+**Go implementations:** See [meters/shared/precision](https://github.com/chrisconley/meters/tree/main/shared/precision) for a production-ready reference implementation that provides financial-grade precision.
+
+**Other languages:** Consider decimal libraries appropriate for financial calculations:
+- Python: `decimal.Decimal` (stdlib)
+- JavaScript: `bignumber.js`, `decimal.js`
+- Java: `java.math.BigDecimal`
+- Ruby: `BigDecimal` (stdlib)
+
 ## Documentation
 
 - **[Basic Example](docs/examples/basic-api-metering.md)** - Simple walkthrough with JSON examples
