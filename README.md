@@ -141,7 +141,13 @@ metering-spec/
 
 ## Status
 
-**Experimental prototype.** Expect breaking changes. We're iterating on the data model based on real-world implementation feedback. Nothing is stable yet.
+**Experimental prototype.** This spec is actively evolving based on design principles and real-world requirements. The core data model is being refined through [Architecture Decision Records](design/) that guide implementation work.
+
+**Current state:**
+- [design/](design/) contains working ADRs that define the target design
+- [GitHub Issues](https://github.com/chrisconley/potential-telegram/issues) track active implementation work
+
+Expect breaking changes. Nothing is stable yet.
 
 If you're implementing this, please share feedback on what works and what doesn't.
 
