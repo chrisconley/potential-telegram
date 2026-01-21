@@ -1,0 +1,258 @@
+package internal
+
+import (
+	"fmt"
+	specs "metering-spec/specs"
+	"time"
+)
+
+type MeterRecord struct {
+	ID            MeterRecordID
+	WorkspaceID   MeterRecordWorkspaceID
+	UniverseID    MeterRecordUniverseID
+	Subject       MeterRecordSubject
+	RecordedAt    MeterRecordRecordedAt
+	Measurement   Measurement
+	Dimensions    MeterRecordDimensions
+	SourceEventID MeterRecordSourceEventID
+	MeteredAt     MeterRecordMeteredAt
+}
+
+func NewMeterRecord(spec specs.MeterRecordSpec) (MeterRecord, error) {
+	id, err := NewMeterRecordID(spec.ID)
+	if err != nil {
+		return MeterRecord{}, fmt.Errorf("invalid ID: %w", err)
+	}
+
+	workspaceID, err := NewMeterRecordWorkspaceID(spec.WorkspaceID)
+	if err != nil {
+		return MeterRecord{}, fmt.Errorf("invalid workspace ID: %w", err)
+	}
+
+	universeID, err := NewMeterRecordUniverseID(spec.UniverseID)
+	if err != nil {
+		return MeterRecord{}, fmt.Errorf("invalid universe ID: %w", err)
+	}
+
+	subject, err := NewMeterRecordSubject(spec.Subject)
+	if err != nil {
+		return MeterRecord{}, fmt.Errorf("invalid subject: %w", err)
+	}
+
+	quantity, err := NewDecimal(spec.Measurement.Quantity)
+	if err != nil {
+		return MeterRecord{}, fmt.Errorf("invalid quantity: %w", err)
+	}
+
+	unit, err := NewMeasurementUnit(spec.Measurement.Unit)
+	if err != nil {
+		return MeterRecord{}, fmt.Errorf("invalid unit: %w", err)
+	}
+
+	measurement := NewMeasurement(quantity, unit)
+
+	recordedAt, err := NewMeterRecordRecordedAt(spec.RecordedAt)
+	if err != nil {
+		return MeterRecord{}, fmt.Errorf("invalid recorded at: %w", err)
+	}
+
+	dimensions := NewMeterRecordDimensions()
+	for name, value := range spec.Dimensions {
+		dimensions.Set(name, value)
+	}
+
+	sourceEventID, err := NewMeterRecordSourceEventID(spec.SourceEventID)
+	if err != nil {
+		return MeterRecord{}, fmt.Errorf("invalid source event ID: %w", err)
+	}
+
+	meteredAt, err := NewMeterRecordMeteredAt(spec.MeteredAt)
+	if err != nil {
+		return MeterRecord{}, fmt.Errorf("invalid metered at: %w", err)
+	}
+
+	return MeterRecord{
+		ID:            id,
+		WorkspaceID:   workspaceID,
+		UniverseID:    universeID,
+		Subject:       subject,
+		RecordedAt:    recordedAt,
+		Measurement:   measurement,
+		Dimensions:    dimensions,
+		SourceEventID: sourceEventID,
+		MeteredAt:     meteredAt,
+	}, nil
+}
+
+type MeterRecordID struct {
+	value string
+}
+
+func NewMeterRecordID(value string) (MeterRecordID, error) {
+	if value == "" {
+		return MeterRecordID{}, fmt.Errorf("ID is required")
+	}
+	return MeterRecordID{value: value}, nil
+}
+
+func (id MeterRecordID) ToString() string {
+	return id.value
+}
+
+type MeterRecordSubject struct {
+	value string
+}
+
+func NewMeterRecordSubject(value string) (MeterRecordSubject, error) {
+	if value == "" {
+		return MeterRecordSubject{}, fmt.Errorf("subject is required")
+	}
+	return MeterRecordSubject{value: value}, nil
+}
+
+func (s MeterRecordSubject) ToString() string {
+	return s.value
+}
+
+type MeterRecordRecordedAt struct {
+	value time.Time
+}
+
+func NewMeterRecordRecordedAt(value time.Time) (MeterRecordRecordedAt, error) {
+	if value.IsZero() {
+		return MeterRecordRecordedAt{}, fmt.Errorf("recorded at is required")
+	}
+	return MeterRecordRecordedAt{value: value}, nil
+}
+
+func (t MeterRecordRecordedAt) ToTime() time.Time {
+	return t.value
+}
+
+type MeterRecordDimensions struct {
+	values map[string]string
+}
+
+func NewMeterRecordDimensions() MeterRecordDimensions {
+	return MeterRecordDimensions{
+		values: make(map[string]string),
+	}
+}
+
+func (d *MeterRecordDimensions) Set(name string, value string) {
+	d.values[name] = value
+}
+
+func (d MeterRecordDimensions) Get(name string) (string, bool) {
+	val, ok := d.values[name]
+	return val, ok
+}
+
+func (d MeterRecordDimensions) Has(name string) bool {
+	_, ok := d.values[name]
+	return ok
+}
+
+func (d MeterRecordDimensions) Names() []string {
+	names := make([]string, 0, len(d.values))
+	for name := range d.values {
+		names = append(names, name)
+	}
+	return names
+}
+
+type MeterRecordSourceEventID struct {
+	value string
+}
+
+func NewMeterRecordSourceEventID(value string) (MeterRecordSourceEventID, error) {
+	if value == "" {
+		return MeterRecordSourceEventID{}, fmt.Errorf("source event ID is required")
+	}
+	return MeterRecordSourceEventID{value: value}, nil
+}
+
+func (id MeterRecordSourceEventID) ToString() string {
+	return id.value
+}
+
+type MeterRecordWorkspaceID struct {
+	value string
+}
+
+func NewMeterRecordWorkspaceID(value string) (MeterRecordWorkspaceID, error) {
+	if value == "" {
+		return MeterRecordWorkspaceID{}, fmt.Errorf("workspace ID is required")
+	}
+	return MeterRecordWorkspaceID{value: value}, nil
+}
+
+func (id MeterRecordWorkspaceID) ToString() string {
+	return id.value
+}
+
+type MeterRecordUniverseID struct {
+	value string
+}
+
+func NewMeterRecordUniverseID(value string) (MeterRecordUniverseID, error) {
+	if value == "" {
+		return MeterRecordUniverseID{}, fmt.Errorf("universe ID is required")
+	}
+	return MeterRecordUniverseID{value: value}, nil
+}
+
+func (u MeterRecordUniverseID) ToString() string {
+	return u.value
+}
+
+// Measurement combines a quantity with a unit
+type Measurement struct {
+	quantity Decimal
+	unit     MeasurementUnit
+}
+
+func NewMeasurement(quantity Decimal, unit MeasurementUnit) Measurement {
+	return Measurement{
+		quantity: quantity,
+		unit:     unit,
+	}
+}
+
+func (m Measurement) Quantity() Decimal {
+	return m.quantity
+}
+
+func (m Measurement) Unit() MeasurementUnit {
+	return m.unit
+}
+
+type MeasurementUnit struct {
+	value string
+}
+
+func NewMeasurementUnit(value string) (MeasurementUnit, error) {
+	if value == "" {
+		return MeasurementUnit{}, fmt.Errorf("unit is required")
+	}
+	return MeasurementUnit{value: value}, nil
+}
+
+func (u MeasurementUnit) ToString() string {
+	return u.value
+}
+
+type MeterRecordMeteredAt struct {
+	value time.Time
+}
+
+func NewMeterRecordMeteredAt(value time.Time) (MeterRecordMeteredAt, error) {
+	if value.IsZero() {
+		value = time.Now()
+	}
+	return MeterRecordMeteredAt{value: value}, nil
+}
+
+func (m MeterRecordMeteredAt) ToTime() time.Time {
+	return m.value
+}
