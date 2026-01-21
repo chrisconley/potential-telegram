@@ -124,7 +124,7 @@ For **billing and financial use cases**, implementations SHOULD:
 - Ensure reproducible calculations (same inputs → same outputs)
 - Guarantee allocation totals when splitting values (sum of parts = original whole)
 
-**Go implementations:** See [meters/shared/precision](https://github.com/chrisconley/meters/tree/main/shared/precision) for a production-ready reference implementation that provides financial-grade precision.
+**Go implementations:** See [meters/shared/precision](https://github.com/chrisconley/meters/tree/main/shared/precision) (not yet public) for a production-ready reference implementation that provides financial-grade precision.
 
 **Other languages:** Consider decimal libraries appropriate for financial calculations:
 - Python: `decimal.Decimal` (stdlib)
