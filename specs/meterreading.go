@@ -72,7 +72,7 @@ type MeterReadingSpec struct {
 	//
 	// Unlike ObservationSpec, this does not include a Window field—temporal context
 	// is provided by the parent MeterReading.Window instead.
-	Value AggregatedValueSpec `json:"value"`
+	Value AggregateSpec `json:"value"`
 
 	// Aggregation strategy applied to compute the measurement.
 	//
