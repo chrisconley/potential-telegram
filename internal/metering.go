@@ -28,16 +28,19 @@ func Meter(payloadSpec specs.EventPayloadSpec, configSpec specs.MeteringConfigSp
 	// Convert domain objects back to specs
 	recordSpecs := make([]specs.MeterRecordSpec, len(records))
 	for i, record := range records {
+		observedAt := record.RecordedAt.ToTime()
+
 		recordSpecs[i] = specs.MeterRecordSpec{
 			ID:          record.ID.ToString(),
 			WorkspaceID: record.WorkspaceID.ToString(),
 			UniverseID:  record.UniverseID.ToString(),
 			Subject:     record.Subject.ToString(),
-			RecordedAt:  record.RecordedAt.ToTime(),
-			Measurement: specs.MeasurementSpec{
-				Quantity: record.Measurement.Quantity().String(),
-				Unit:     record.Measurement.Unit().ToString(),
-			},
+			ObservedAt:  observedAt,
+			Observation: specs.NewInstantObservation(
+				record.Measurement.Quantity().String(),
+				record.Measurement.Unit().ToString(),
+				observedAt,
+			),
 			Dimensions:    convertDimensionsToMap(record.Dimensions),
 			SourceEventID: record.SourceEventID.ToString(),
 			MeteredAt:     record.MeteredAt.ToTime(),
@@ -112,17 +115,19 @@ func meter(payload EventPayload, config MeteringConfig) ([]MeterRecord, error) {
 		// Build MeterRecord
 		// TODO: ID generation strategy - for now just concatenate payload.ID + unit
 		recordID := payload.ID.ToString() + ":" + extraction.Unit().ToString()
+		observedAt := payload.Time.ToTime()
 
 		record, err := NewMeterRecord(specs.MeterRecordSpec{
 			ID:          recordID,
 			WorkspaceID: payload.WorkspaceID.ToString(),
 			UniverseID:  payload.UniverseID.ToString(),
 			Subject:     payload.Subject.ToString(),
-			RecordedAt:  payload.Time.ToTime(),
-			Measurement: specs.MeasurementSpec{
-				Quantity: quantity.String(),
-				Unit:     extraction.Unit().ToString(),
-			},
+			ObservedAt:  observedAt,
+			Observation: specs.NewInstantObservation(
+				quantity.String(),
+				extraction.Unit().ToString(),
+				observedAt,
+			),
 			Dimensions:    dimensionsMap,
 			SourceEventID: payload.ID.ToString(),
 			// MeteredAt will default to time.Now() in NewMeterRecord

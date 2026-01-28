@@ -54,7 +54,7 @@ func Aggregate(
 		UniverseID:   reading.UniverseID.ToString(),
 		Subject:      reading.Subject.ToString(),
 		Window:       configSpec.Window,
-		Measurement: specs.MeasurementSpec{
+		Value: specs.AggregateSpec{
 			Quantity: reading.Measurement.Quantity().String(),
 			Unit:     reading.Measurement.Unit().ToString(),
 		},

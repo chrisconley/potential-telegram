@@ -117,7 +117,7 @@ func (h *InFlightAggregator) Handle(e infra.Event) {
 	record := e.(InFlightMeterRecordedEvent).Record
 
 	// Determine which tick (1-second window) this record belongs to
-	recordTick := record.RecordedAt.Truncate(time.Second)
+	recordTick := record.ObservedAt.Truncate(time.Second)
 
 	// Detect tick change - we've moved to a new time window
 	if !h.currentTick.IsZero() && recordTick.After(h.currentTick) {
@@ -193,7 +193,7 @@ func (h *RatingHandler) Handle(e infra.Event) {
 	config := h.configRepo.GetRatingConfig()
 
 	// Extract quantity from reading
-	quantity, err := internal.NewDecimal(reading.Measurement.Quantity)
+	quantity, err := internal.NewDecimal(reading.Value.Quantity)
 	if err != nil {
 		panic(fmt.Sprintf("Invalid quantity: %v", err))
 	}
@@ -227,7 +227,7 @@ func (h *PostFlightAggregator) Handle(e infra.Event) {
 	record := e.(InFlightMeterRecordedEvent).Record
 
 	// Determine which tick (10-second window) this record belongs to
-	recordTick := record.RecordedAt.Truncate(10 * time.Second)
+	recordTick := record.ObservedAt.Truncate(10 * time.Second)
 
 	// Detect tick change - we've moved to a new time window
 	if !h.currentTick.IsZero() && recordTick.After(h.currentTick) {
@@ -281,8 +281,8 @@ type CustomerBalanceHandler struct{}
 func (h *CustomerBalanceHandler) Handle(e infra.Event) {
 	reading := e.(PostFlightMeterReadEvent).Reading
 	fmt.Printf("📊 Customer balance update: %s %s for window %s to %s\n",
-		reading.Measurement.Quantity,
-		reading.Measurement.Unit,
+		reading.Value.Quantity,
+		reading.Value.Unit,
 		reading.Window.Start.Format("15:04:05"),
 		reading.Window.End.Format("15:04:05"))
 }
@@ -381,7 +381,7 @@ func TestHighThroughputMeteringPipeline(t *testing.T) {
 
 	// Verify each 10-second reading aggregated 100 requests
 	for i, reading := range postFlightReadings {
-		assert.Equal(t, "100", reading.Measurement.Quantity,
+		assert.Equal(t, "100", reading.Value.Quantity,
 			"reading %d should aggregate 100 requests", i+1)
 	}
 

@@ -75,7 +75,7 @@ type ObservationSpec struct {
 }
 
 // Aggregated value computed from observations
-type AggregatedValueSpec struct {
+type AggregateSpec struct {
     Quantity string
     Unit     string
     // No window - temporal context is in MeterReading.Window
@@ -149,7 +149,7 @@ type MeterRecordSpec struct {
 
 type MeterReadingSpec struct {
     Window TimeWindowSpec       // Aggregation period (always present)
-    Value  AggregatedValueSpec  // Result (no window - it's in parent)
+    Value  AggregateSpec  // Result (no window - it's in parent)
     // ...
 }
 ```
@@ -191,13 +191,13 @@ Different operations are valid:
 func Aggregate(
     observations []ObservationSpec,  // Can ONLY take observations
     config AggregateConfig,
-) (AggregatedValueSpec, error)      // Returns aggregated value
+) (AggregateSpec, error)      // Returns aggregated value
 
 // Future: hierarchical aggregation (if needed)
 func ReAggregate(
-    values []AggregatedValueSpec,    // Can ONLY take aggregated values
+    values []AggregateSpec,    // Can ONLY take aggregated values
     config ReAggregateConfig,
-) (AggregatedValueSpec, error)
+) (AggregateSpec, error)
 ```
 
 **Without separate types, runtime checks everywhere:**
@@ -229,11 +229,11 @@ Decision made once, information preserved for all consumers.
 ```go
 // Crystal clear what each is
 observation := ObservationSpec{...}    // Raw measurement
-aggregated := AggregatedValueSpec{...} // Computed result
+aggregated := AggregateSpec{...} // Computed result
 
 // Type system prevents confusion
 Aggregate([]ObservationSpec{...})      // ✓ Correct
-Aggregate([]AggregatedValueSpec{...})  // ✗ Compiler error
+Aggregate([]AggregateSpec{...})  // ✗ Compiler error
 ```
 
 **With single type:**
@@ -297,7 +297,7 @@ Alternative would require separate fields (instant timestamp vs span window), ad
 
 ### Negative
 
-1. **Migration effort:** Need to rename `MeasurementSpec` → `ObservationSpec` in MeterRecord, create new `AggregatedValueSpec` for MeterReading
+1. **Migration effort:** Need to rename `MeasurementSpec` → `ObservationSpec` in MeterRecord, create new `AggregateSpec` for MeterReading
 2. **Convention required:** `[T, T]` for instants is mathematical quirk (half-open interval technically empty)
 3. **Extra field:** `Window` always present even when redundant with `ObservedAt` for instant observations
 
@@ -371,7 +371,7 @@ type ObservationSpec struct {
     Window   TimeWindowSpec
 }
 
-type AggregatedValueSpec struct {
+type AggregateSpec struct {
     Quantity string
     Unit     string
 }
@@ -399,7 +399,7 @@ type MeterRecordSpec struct {
 ```go
 type MeterReadingSpec struct {
     Window TimeWindowSpec
-    Value  AggregatedValueSpec   // New field (replaces Measurement)
+    Value  AggregateSpec   // New field (replaces Measurement)
     // Measurement MeasurementSpec // Deprecated
     Aggregation string
     // ...
@@ -463,7 +463,7 @@ reading := MeterReadingSpec{
         Start: 2026-02-01T00:00:00Z,
         End:   2026-03-01T00:00:00Z,
     },
-    Value: AggregatedValueSpec{
+    Value: AggregateSpec{
         Quantity: "12.32",  // Computed average
         Unit:     "seats",
     },
@@ -496,7 +496,7 @@ reading := MeterReadingSpec{
 
 ## Conclusion
 
-Observations and aggregations are fundamentally different domain concepts that should be represented as separate types (`ObservationSpec` vs `AggregatedValueSpec`). All observations require temporal context represented as a `Window`, using the convention `[T, T]` for instant observations and `[T1, T2]` for time-spanning observations. This design:
+Observations and aggregations are fundamentally different domain concepts that should be represented as separate types (`ObservationSpec` vs `AggregateSpec`). All observations require temporal context represented as a `Window`, using the convention `[T, T]` for instant observations and `[T1, T2]` for time-spanning observations. This design:
 
 - Provides type safety and clear contracts
 - Preserves full temporal information for downstream consumers

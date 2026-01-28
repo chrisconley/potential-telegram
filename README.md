@@ -53,15 +53,19 @@ This spec explores a data model for these problems, with a Go reference implemen
 {
   "id": "rec_xyz789",
   "subject": "customer:cust_123",
-  "measurement": {
+  "observation": {
     "quantity": "145",
-    "unit": "milliseconds"
+    "unit": "milliseconds",
+    "window": {
+      "start": "2024-01-15T10:30:00Z",
+      "end": "2024-01-15T10:30:00Z"
+    }
   },
   "dimensions": {
     "endpoint": "/api/users",
     "region": "us-east"
   },
-  "recordedAt": "2024-01-15T10:30:00Z"
+  "observedAt": "2024-01-15T10:30:00Z"
 }
 ```
 
@@ -69,7 +73,7 @@ This spec explores a data model for these problems, with a Go reference implemen
 ```json
 {
   "subject": "customer:cust_123",
-  "measurement": {
+  "value": {
     "quantity": "14523",
     "unit": "milliseconds"
   },

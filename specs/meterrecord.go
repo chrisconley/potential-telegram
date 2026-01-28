@@ -40,19 +40,21 @@ type MeterRecordSpec struct {
 	// "team:engineering". Subject identity is scoped to the universe.
 	Subject string `json:"subject"`
 
-	// Business timestamp indicating when the usage occurred.
+	// Business timestamp indicating when the usage was observed.
 	//
 	// This is the event time from the original event payload, not when the record
-	// was processed. Used for time-based aggregations and billing period assignment.
+	// was processed. For instant observations, this matches Observation.Window.Start
+	// (and Window.End). Used for time-based aggregations and billing period assignment.
 	// Distinct from MeteredAt which tracks system processing time.
-	RecordedAt time.Time `json:"recordedAt"`
+	ObservedAt time.Time `json:"observedAt"`
 
-	// The measured quantity with its unit.
+	// The observed quantity with its unit and temporal context.
 	//
-	// Contains both the numeric quantity (as a decimal string for precision) and
-	// the unit identifier (e.g., "api-calls", "tokens", "gb-hours"). The unit
-	// determines how this measurement aggregates and gets rated for billing.
-	Measurement MeasurementSpec `json:"measurement"`
+	// Contains the numeric quantity (as a decimal string for precision), the unit
+	// identifier, and the temporal extent (Window field). For instant observations
+	// (gauges, discrete events), Window.Start == Window.End. For time-spanning
+	// observations (compute duration), Window.Start < Window.End.
+	Observation ObservationSpec `json:"observation"`
 
 	// Additional categorical attributes from the source event.
 	//

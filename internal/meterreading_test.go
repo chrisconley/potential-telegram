@@ -24,7 +24,7 @@ func TestNewMeterReading(t *testing.T) {
 				Start: windowStart,
 				End:   windowEnd,
 			},
-			Measurement: specs.MeasurementSpec{
+			Value: specs.AggregateSpec{
 				Quantity: "1250.50",
 				Unit:     "api-tokens",
 			},
@@ -61,7 +61,7 @@ func TestNewMeterReading(t *testing.T) {
 				Start: time.Time{}, // Zero value
 				End:   time.Now(),
 			},
-			Measurement: specs.MeasurementSpec{
+			Value: specs.AggregateSpec{
 				Quantity: "100",
 				Unit:     "tokens",
 			},
@@ -85,7 +85,7 @@ func TestNewMeterReading(t *testing.T) {
 				Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 				End:   time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
 			},
-			Measurement: specs.MeasurementSpec{
+			Value: specs.AggregateSpec{
 				Quantity: "100",
 				Unit:     "tokens",
 			},
@@ -109,7 +109,7 @@ func TestNewMeterReading(t *testing.T) {
 				Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 				End:   time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
 			},
-			Measurement: specs.MeasurementSpec{
+			Value: specs.AggregateSpec{
 				Quantity: "100",
 				Unit:     "tokens",
 			},
