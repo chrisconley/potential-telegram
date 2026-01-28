@@ -165,23 +165,26 @@ func TestMeter(t *testing.T) {
 
 		// Assert
 		require.NoError(t, err)
-		require.Len(t, recordSpecs, 2, "should create one record per extraction")
+		require.Len(t, recordSpecs, 1, "should create one record with bundled observations")
 
-		// Verify first record
-		assert.Equal(t, "1250", recordSpecs[0].Observation.Quantity)
-		assert.Equal(t, "input-tokens", recordSpecs[0].Observation.Unit)
+		record := recordSpecs[0]
 
-		// Verify second record
-		assert.Equal(t, "340", recordSpecs[1].Observation.Quantity)
-		assert.Equal(t, "output-tokens", recordSpecs[1].Observation.Unit)
+		// Verify bundled observations (new field)
+		require.Len(t, record.Observations, 2, "should have two observations")
+		assert.Equal(t, "1250", record.Observations[0].Quantity)
+		assert.Equal(t, "input-tokens", record.Observations[0].Unit)
+		assert.Equal(t, "340", record.Observations[1].Quantity)
+		assert.Equal(t, "output-tokens", record.Observations[1].Unit)
+
+		// Verify backwards compatibility (old field contains first observation)
+		assert.Equal(t, "1250", record.Observation.Quantity)
+		assert.Equal(t, "input-tokens", record.Observation.Unit)
 
 		// Verify dimensions: all extracted properties excluded, only model remains
-		for i, record := range recordSpecs {
-			assert.Equal(t, "gpt-4", record.Dimensions["model"], "record %d should have non-extracted dimension", i)
-			_, hasInputTokens := record.Dimensions["input_tokens"]
-			assert.False(t, hasInputTokens, "record %d should not have extracted dimension", i)
-			_, hasOutputTokens := record.Dimensions["output_tokens"]
-			assert.False(t, hasOutputTokens, "record %d should not have extracted dimension", i)
-		}
+		assert.Equal(t, "gpt-4", record.Dimensions["model"], "should have non-extracted dimension")
+		_, hasInputTokens := record.Dimensions["input_tokens"]
+		assert.False(t, hasInputTokens, "should not have extracted dimension")
+		_, hasOutputTokens := record.Dimensions["output_tokens"]
+		assert.False(t, hasOutputTokens, "should not have extracted dimension")
 	})
 }

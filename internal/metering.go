@@ -26,25 +26,52 @@ func Meter(payloadSpec specs.EventPayloadSpec, configSpec specs.MeteringConfigSp
 	}
 
 	// Convert domain objects back to specs
-	recordSpecs := make([]specs.MeterRecordSpec, len(records))
-	for i, record := range records {
-		observedAt := record.RecordedAt.ToTime()
+	// NOTE: During migration, we return one record per event with bundled observations
+	// For backwards compatibility, we still support the old format where meter()
+	// returns multiple records (one per measurement)
+	if len(records) == 0 {
+		return []specs.MeterRecordSpec{}, nil
+	}
 
-		recordSpecs[i] = specs.MeterRecordSpec{
-			ID:          record.ID.ToString(),
-			WorkspaceID: record.WorkspaceID.ToString(),
-			UniverseID:  record.UniverseID.ToString(),
-			Subject:     record.Subject.ToString(),
-			ObservedAt:  observedAt,
-			Observation: specs.NewInstantObservation(
+	// Bundle observations from the same source event
+	// Group records by SourceEventID
+	recordsByEvent := make(map[string][]MeterRecord)
+	for _, record := range records {
+		eventID := record.SourceEventID.ToString()
+		recordsByEvent[eventID] = append(recordsByEvent[eventID], record)
+	}
+
+	// Create one MeterRecordSpec per event with bundled observations
+	recordSpecs := make([]specs.MeterRecordSpec, 0, len(recordsByEvent))
+	for _, eventRecords := range recordsByEvent {
+		// Use first record for common fields
+		firstRecord := eventRecords[0]
+		observedAt := firstRecord.RecordedAt.ToTime()
+
+		// Bundle all observations
+		observations := make([]specs.ObservationSpec, len(eventRecords))
+		for i, record := range eventRecords {
+			observations[i] = specs.NewInstantObservation(
 				record.Measurement.Quantity().String(),
 				record.Measurement.Unit().ToString(),
 				observedAt,
-			),
-			Dimensions:    convertDimensionsToMap(record.Dimensions),
-			SourceEventID: record.SourceEventID.ToString(),
-			MeteredAt:     record.MeteredAt.ToTime(),
+			)
 		}
+
+		recordSpec := specs.MeterRecordSpec{
+			ID:            firstRecord.SourceEventID.ToString(), // Just event ID, no unit suffix
+			WorkspaceID:   firstRecord.WorkspaceID.ToString(),
+			UniverseID:    firstRecord.UniverseID.ToString(),
+			Subject:       firstRecord.Subject.ToString(),
+			ObservedAt:    observedAt,
+			Observations:  observations,                      // NEW: all observations
+			Observation:   observations[0],                   // OLD: first one for backwards compat
+			Dimensions:    convertDimensionsToMap(firstRecord.Dimensions),
+			SourceEventID: firstRecord.SourceEventID.ToString(),
+			MeteredAt:     firstRecord.MeteredAt.ToTime(),
+		}
+
+		recordSpecs = append(recordSpecs, recordSpec)
 	}
 
 	return recordSpecs, nil
