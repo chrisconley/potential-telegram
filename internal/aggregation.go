@@ -54,17 +54,10 @@ func Aggregate(
 		UniverseID:   reading.UniverseID.ToString(),
 		Subject:      reading.Subject.ToString(),
 		Window:       configSpec.Window,
-
-		// Dual-write: populate both old and new fields
-		Measurement: specs.MeasurementSpec{
-			Quantity: reading.Measurement.Quantity().String(),
-			Unit:     reading.Measurement.Unit().ToString(),
-		},
 		Value: specs.AggregatedValueSpec{
 			Quantity: reading.Measurement.Quantity().String(),
 			Unit:     reading.Measurement.Unit().ToString(),
 		},
-
 		Aggregation:  reading.Aggregation.ToString(),
 		RecordCount:  reading.RecordCount.ToInt(),
 		CreatedAt:    reading.CreatedAt.ToTime(),

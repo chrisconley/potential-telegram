@@ -35,22 +35,12 @@ func Meter(payloadSpec specs.EventPayloadSpec, configSpec specs.MeteringConfigSp
 			WorkspaceID: record.WorkspaceID.ToString(),
 			UniverseID:  record.UniverseID.ToString(),
 			Subject:     record.Subject.ToString(),
-
-			// Dual-write: populate both old and new fields
-			RecordedAt:  observedAt,
 			ObservedAt:  observedAt,
-
-			// Dual-write: populate both old and new fields
-			Measurement: specs.MeasurementSpec{
-				Quantity: record.Measurement.Quantity().String(),
-				Unit:     record.Measurement.Unit().ToString(),
-			},
 			Observation: specs.NewInstantObservation(
 				record.Measurement.Quantity().String(),
 				record.Measurement.Unit().ToString(),
 				observedAt,
 			),
-
 			Dimensions:    convertDimensionsToMap(record.Dimensions),
 			SourceEventID: record.SourceEventID.ToString(),
 			MeteredAt:     record.MeteredAt.ToTime(),
@@ -132,22 +122,12 @@ func meter(payload EventPayload, config MeteringConfig) ([]MeterRecord, error) {
 			WorkspaceID: payload.WorkspaceID.ToString(),
 			UniverseID:  payload.UniverseID.ToString(),
 			Subject:     payload.Subject.ToString(),
-
-			// Dual-write: populate both old and new fields
-			RecordedAt:  observedAt,
 			ObservedAt:  observedAt,
-
-			// Dual-write: populate both old and new fields
-			Measurement: specs.MeasurementSpec{
-				Quantity: quantity.String(),
-				Unit:     extraction.Unit().ToString(),
-			},
 			Observation: specs.NewInstantObservation(
 				quantity.String(),
 				extraction.Unit().ToString(),
 				observedAt,
 			),
-
 			Dimensions:    dimensionsMap,
 			SourceEventID: payload.ID.ToString(),
 			// MeteredAt will default to time.Now() in NewMeterRecord
