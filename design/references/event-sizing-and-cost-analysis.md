@@ -437,9 +437,9 @@ EventPayloadSpecWithInt64{
 ## Complete Type Analysis with Benchmark Validation
 
 **Date:** 2026-01-28
-**Context:** Extending analysis to full EventPayload, MeterRecord, and MeterReading types with benchmark measurements
+**Context:** Measuring actual JSON wire format sizes for complete EventPayload, MeterRecord, and MeterReading types
 
-This section validates the theoretical calculations above with actual benchmark tests and extends the analysis to complete type structures.
+This section provides measured JSON serialization sizes for all three core types using actual benchmark tests.
 
 ### Benchmark Infrastructure
 
@@ -447,39 +447,18 @@ Created comprehensive benchmark tests in `benchmarks/` package:
 - `eventpayload_test.go` - EventPayloadSpec benchmarks
 - `meterrecord_test.go` - MeterRecordSpec benchmarks
 - `meterreading_test.go` - MeterReadingSpec benchmarks
-- `sizing_calculator_test.go` - Memory profiling and size calculations
+- `sizing_calculator_test.go` - Size calculations and performance tests
 
 **Run benchmarks:**
 ```bash
 go test -bench=. -benchmem ./benchmarks/
-go test -v ./benchmarks/ -run 'TestSizeBreakdown|TestStructSizes'
 ```
-
-### Struct Size Analysis (unsafe.Sizeof)
-
-Measured actual struct sizes using `unsafe.Sizeof`:
-
-| Type | Size (bytes) | Components |
-|------|--------------|------------|
-| `EventPayloadSpec` | 112 | 5 strings + time.Time + map |
-| `MeterRecordSpec` | 168 | 5 strings + 2 time.Time + MeasurementSpec + map |
-| `MeterReadingSpec` | 216 | 5 strings + 3 time.Time + TimeWindowSpec + MeasurementSpec + int |
-| `MeasurementSpec` | 32 | 2 strings |
-| `TimeWindowSpec` | 48 | 2 time.Time |
-| `time.Time` | 24 | 3 int64 fields |
-| `string` (header) | 16 | pointer (8) + length (8) |
-| `map` (header) | 8 | pointer to hmap |
-
-**Key Insight:** These are **struct shell sizes only**. Actual memory includes:
-- String data (pointed to by string headers)
-- Map entries (key-value pairs)
-- Map internal structure (hmap + buckets)
 
 ---
 
-### EventPayloadSpec: Complete Size Breakdown
+### EventPayloadSpec: JSON Wire Format Sizes
 
-From benchmark measurements (`TestEventPayloadSizeBreakdown`):
+From benchmark measurements:
 
 #### Scenario 1: Minimal (All Empty Strings)
 
@@ -495,93 +474,62 @@ EventPayloadSpec{
 }
 ```
 
-**Sizes:**
-- **Struct shell**: 112 bytes
-- **Go memory estimate**: 104 bytes
-- **JSON wire format**: 95 bytes
-- **PostgreSQL estimate**: 13 bytes
-
-**Analysis:** Empty strings still occupy struct fields (16-byte headers) but point to shared empty string data.
+**JSON wire format**: 95 bytes
 
 #### Scenario 2: Short Strings
 
 ```go
 EventPayloadSpec{
-    ID:          "evt_123",      // 7 chars
-    WorkspaceID: "ws_456",       // 6 chars
-    UniverseID:  "prod",         // 4 chars
-    Type:        "api",          // 3 chars
-    Subject:     "cust_789",     // 8 chars
+    ID:          "evt_123",
+    WorkspaceID: "ws_456",
+    UniverseID:  "prod",
+    Type:        "api",
+    Subject:     "cust_789",
     Time:        time.Now(),
     Properties:  nil,
 }
 ```
 
-**Sizes:**
-- **Go memory estimate**: 132 bytes
-- **JSON wire format**: 135 bytes
-- **PostgreSQL estimate**: 41 bytes
-
-**Breakdown (Go memory):**
-- 5 string headers: 5 × 16 = 80 bytes
-- String data: 7 + 6 + 4 + 3 + 8 = 28 bytes
-- time.Time: 24 bytes
-- **Total: 132 bytes**
+**JSON wire format**: 135 bytes
 
 #### Scenario 3: Realistic (Short WorkspaceID + Properties)
 
 ```go
 EventPayloadSpec{
-    ID:          "550e8400-e29b-41d4-a716-446655440000",  // 36 chars
-    WorkspaceID: "ws_a1b2c3d4",                           // 11 chars
-    UniverseID:  "prod",                                  // 4 chars
-    Type:        "api.request",                           // 11 chars
-    Subject:     "customer:cust_abc123",                  // 22 chars
-    Time:        time.Now(),                              // 24 bytes
+    ID:          "550e8400-e29b-41d4-a716-446655440000",
+    WorkspaceID: "ws_a1b2c3d4",
+    UniverseID:  "prod",
+    Type:        "api.request",
+    Subject:     "customer:cust_abc123",
+    Time:        time.Now(),
     Properties: map[string]string{
-        "endpoint": "/api/users",  // 8 + 10 chars
-        "tokens":   "1500",        // 6 + 4 chars
+        "endpoint": "/api/users",
+        "tokens":   "1500",
     },
 }
 ```
 
-**Sizes:**
-- **Go memory estimate**: 326 bytes
-- **JSON wire format**: 244 bytes (measured from benchmark)
-- **PostgreSQL estimate**: 132 bytes
-
-**Breakdown (Go memory):**
-- 5 string headers: 80 bytes
-- String data: 36 + 11 + 4 + 11 + 22 = 84 bytes
-- time.Time: 24 bytes
-- Map header: 48 bytes
-- Map entries: 2 × ((16 + 8) + (16 + 10)) + 2 × ((16 + 6) + (16 + 4)) = 90 bytes
-- **Total: 326 bytes**
-
-**JSON actual (from benchmark):** 232-244 bytes depending on timestamp format
+**JSON wire format**: 232-244 bytes (varies by timestamp format)
 
 #### Scenario 4: UUID WorkspaceID + Properties
 
 Same as Scenario 3 but with full UUID for WorkspaceID:
 
 ```go
-WorkspaceID: "550e8400-e29b-41d4-a716-446655440001",  // 36 chars
+WorkspaceID: "550e8400-e29b-41d4-a716-446655440001",  // 36 chars vs 11
 ```
 
-**Sizes:**
-- **Go memory estimate**: 351 bytes (+25 bytes vs short WorkspaceID)
-- **JSON wire format**: 269 bytes (+25 bytes vs short WorkspaceID)
-- **PostgreSQL estimate**: 157 bytes (+25 bytes vs short WorkspaceID)
+**JSON wire format**: 269 bytes (+25 bytes vs short WorkspaceID)
 
-**Validation:** UUID adds exactly 25 bytes in all contexts (36 - 11 = 25 character difference).
+**Key finding:** UUID adds exactly 25 bytes (36 - 11 = 25 character difference).
 
 ---
 
-### MeterRecordSpec: Complete Size Breakdown
+### MeterRecordSpec: JSON Wire Format Sizes
 
-From benchmark measurements (`TestMeterRecordSizeBreakdown`):
+From benchmark measurements:
 
-#### Scenario 1: Minimal
+#### Minimal
 
 ```go
 MeterRecordSpec{
@@ -597,60 +545,43 @@ MeterRecordSpec{
 }
 ```
 
-**Sizes:**
-- **Struct shell**: 168 bytes
-- **Go memory estimate**: 160 bytes
-- **JSON wire format**: 185 bytes
-- **PostgreSQL estimate**: 23 bytes
+**JSON wire format**: 185 bytes
 
-#### Scenario 2: Realistic
+#### Realistic
 
 ```go
 MeterRecordSpec{
-    ID:          "mr_550e8400-e29b-41d4-a716-446655440000",  // 41 chars
-    WorkspaceID: "ws_a1b2c3d4",                              // 11 chars
-    UniverseID:  "prod",                                     // 4 chars
-    Subject:     "customer:cust_abc123",                     // 22 chars
-    RecordedAt:  time.Now(),                                 // 24 bytes
+    ID:          "mr_550e8400-e29b-41d4-a716-446655440000",
+    WorkspaceID: "ws_a1b2c3d4",
+    UniverseID:  "prod",
+    Subject:     "customer:cust_abc123",
+    RecordedAt:  time.Now(),
     Measurement: MeasurementSpec{
-        Quantity: "1500",   // 4 chars
-        Unit:     "tokens", // 6 chars
+        Quantity: "1500",
+        Unit:     "tokens",
     },
     Dimensions: map[string]string{
-        "model":    "gpt-4",            // 5 + 5 chars
-        "endpoint": "/api/completions", // 8 + 16 chars
+        "model":    "gpt-4",
+        "endpoint": "/api/completions",
     },
-    SourceEventID: "evt_550e8400-e29b-41d4-a716-446655440000",  // 41 chars
-    MeteredAt:     time.Now(),                                   // 24 bytes
+    SourceEventID: "evt_550e8400-e29b-41d4-a716-446655440000",
+    MeteredAt:     time.Now(),
 }
 ```
 
-**Sizes:**
-- **Go memory estimate**: 430 bytes
-- **JSON wire format**: 394 bytes (measured), 370 bytes (typical)
-- **PostgreSQL estimate**: 190 bytes
-
-**Breakdown (Go memory):**
-- 5 string headers: 80 bytes
-- String data: 41 + 11 + 4 + 22 + 41 = 119 bytes
-- 2 time.Time: 48 bytes
-- MeasurementSpec: 2 string headers (32 bytes) + data (4 + 6 = 10 bytes)
-- Dimensions map header: 48 bytes
-- Dimensions entries: 2 × ((16 + 5) + (16 + 5)) + 2 × ((16 + 8) + (16 + 16)) = 93 bytes
-- **Total: ~430 bytes**
+**JSON wire format**: 370-394 bytes (varies by timestamp format)
 
 **Performance (from benchmarks):**
-- Memory allocation: ~110 ns/op (realistic scenario)
 - JSON marshal: ~1020 ns/op, 800 B/op, 9 allocs/op
 - JSON unmarshal: ~3704 ns/op, 1008 B/op, 23 allocs/op
 
 ---
 
-### MeterReadingSpec: Complete Size Breakdown
+### MeterReadingSpec: JSON Wire Format Sizes
 
-From benchmark measurements (`TestMeterReadingSizeBreakdown`):
+From benchmark measurements:
 
-#### Scenario 1: Minimal
+#### Minimal
 
 ```go
 MeterReadingSpec{
@@ -667,166 +598,90 @@ MeterReadingSpec{
 }
 ```
 
-**Sizes:**
-- **Struct shell**: 216 bytes
-- **Go memory estimate**: 216 bytes
-- **JSON wire format**: 272 bytes
-- **PostgreSQL estimate**: 43 bytes
+**JSON wire format**: 272 bytes
 
-#### Scenario 2: Realistic (Sum Aggregation)
+#### Realistic (Sum Aggregation)
 
 ```go
 MeterReadingSpec{
-    ID:          "mrd_550e8400-e29b-41d4-a716-446655440000",  // 42 chars
-    WorkspaceID: "ws_a1b2c3d4",                               // 11 chars
-    UniverseID:  "prod",                                      // 4 chars
-    Subject:     "customer:cust_abc123",                      // 22 chars
+    ID:          "mrd_550e8400-e29b-41d4-a716-446655440000",
+    WorkspaceID: "ws_a1b2c3d4",
+    UniverseID:  "prod",
+    Subject:     "customer:cust_abc123",
     Window: TimeWindowSpec{
-        Start: 2024-02-01T00:00:00Z,  // 24 bytes
-        End:   2024-03-01T00:00:00Z,  // 24 bytes
+        Start: 2024-02-01T00:00:00Z,
+        End:   2024-03-01T00:00:00Z,
     },
     Measurement: MeasurementSpec{
-        Quantity: "12500",  // 5 chars
-        Unit:     "tokens", // 6 chars
+        Quantity: "12500",
+        Unit:     "tokens",
     },
-    Aggregation:  "sum",       // 3 chars
-    RecordCount:  1250,        // 8 bytes (int)
-    CreatedAt:    time.Now(),  // 24 bytes
-    MaxMeteredAt: time.Now(),  // 24 bytes
+    Aggregation:  "sum",
+    RecordCount:  1250,
+    CreatedAt:    time.Now(),
+    MaxMeteredAt: time.Now(),
 }
 ```
 
-**Sizes:**
-- **Go memory estimate**: 305 bytes
-- **JSON wire format**: 388 bytes (measured), 364 bytes (typical)
-- **PostgreSQL estimate**: 132 bytes
-
-**Breakdown (Go memory):**
-- 5 string headers: 80 bytes
-- String data: 42 + 11 + 4 + 22 + 3 = 82 bytes
-- TimeWindowSpec: 2 × 24 = 48 bytes
-- MeasurementSpec: 32 bytes (headers) + 11 bytes (data)
-- int (RecordCount): 8 bytes
-- 2 time.Time: 48 bytes
-- **Total: ~305 bytes**
+**JSON wire format**: 364-388 bytes (varies by timestamp format)
 
 **Performance (from benchmarks):**
-- Memory allocation: ~100 ns/op (realistic scenario)
 - JSON marshal: ~1210 ns/op, 800 B/op, 6 allocs/op
 - JSON unmarshal: ~3487 ns/op, 600 B/op, 14 allocs/op
 
 ---
 
-### Validation: Theory vs Measurement
+### Summary: JSON Wire Format Sizes
 
-Comparing theoretical calculations with benchmark measurements:
+Measured JSON serialization sizes for realistic scenarios:
 
-#### EventPayloadSpec (Realistic)
+| Type | JSON Wire Format |
+|------|------------------|
+| EventPayloadSpec (short WorkspaceID) | 232-244 bytes |
+| EventPayloadSpec (UUID WorkspaceID) | 269 bytes |
+| MeterRecordSpec | 370-394 bytes |
+| MeterReadingSpec | 364-388 bytes |
 
-| Measurement | Theoretical | Benchmark | Difference |
-|-------------|-------------|-----------|------------|
-| Go memory estimate | 326 bytes | 326 bytes | ✓ Match |
-| JSON wire format | ~250 bytes | 232-244 bytes | ✓ Close |
-| PostgreSQL estimate | ~130 bytes | 132 bytes | ✓ Match |
-
-#### MeterRecordSpec (Realistic)
-
-| Measurement | Theoretical | Benchmark | Difference |
-|-------------|-------------|-----------|------------|
-| Go memory estimate | 430 bytes | 430 bytes | ✓ Match |
-| JSON wire format | ~370 bytes | 370-394 bytes | ✓ Close |
-| PostgreSQL estimate | ~190 bytes | 190 bytes | ✓ Match |
-
-#### MeterReadingSpec (Realistic)
-
-| Measurement | Theoretical | Benchmark | Difference |
-|-------------|-------------|-----------|------------|
-| Go memory estimate | 305 bytes | 305 bytes | ✓ Match |
-| JSON wire format | ~360 bytes | 364-388 bytes | ✓ Close |
-| PostgreSQL estimate | ~130 bytes | 132 bytes | ✓ Match |
-
-**Conclusion:** Theoretical calculations are **accurate within 5%** for all contexts.
+**UUID vs Short String Impact:** +25 bytes per event consistently.
 
 ---
 
 ### Performance Implications at 10k Events/Second
 
-From benchmark measurements:
+From benchmark measurements (darwin/arm64, Apple M1 Pro):
 
-#### EventPayloadSpec
+#### JSON Serialization Performance
 
-**Memory allocation:**
-- Minimal: 0.32 ns/op, 0 B/op, 0 allocs/op (stack allocated)
-- Realistic: 64 ns/op, 0 B/op, 0 allocs/op (stack allocated)
-- Large properties: 253 ns/op, 616 B/op, 3 allocs/op (map allocations)
+| Type | Marshal | Unmarshal |
+|------|---------|-----------|
+| EventPayloadSpec | 704 ns/op | 2555 ns/op |
+| MeterRecordSpec | 1020 ns/op | 3704 ns/op |
+| MeterReadingSpec | 1210 ns/op | 3487 ns/op |
 
-**JSON serialization:**
-- Marshal: 704 ns/op, 544 B/op, 8 allocs/op
-- Unmarshal: 2555 ns/op, 872 B/op, 20 allocs/op
-- Roundtrip: 3007 ns/op, 1417 B/op, 28 allocs/op
+**Key observations:**
 
-**At 10k events/sec:**
-- **CPU time for JSON marshal**: 10k × 704 ns = 7.04 ms/sec = **0.7% CPU**
-- **Memory allocation**: 10k × 544 B = 5.44 MB/sec = **470 GB/day** (before GC)
+1. **JSON serialization**: 700-1,200 ns/op (marshal), 2,500-3,700 ns/op (unmarshal)
+2. **Relative performance**: MeterRecordSpec is 1.4x slower than EventPayloadSpec
+3. **Field size impact**: Minimal - dominated by JSON encoding overhead
 
-#### MeterRecordSpec
-
-**Memory allocation:**
-- Realistic: 110 ns/op, 0 B/op, 0 allocs/op
-
-**JSON serialization:**
-- Marshal: 1020 ns/op, 800 B/op, 9 allocs/op
-- Unmarshal: 3704 ns/op, 1008 B/op, 23 allocs/op
-
-**At 10k records/sec:**
-- **CPU time for JSON marshal**: 10k × 1020 ns = 10.2 ms/sec = **1% CPU**
-- **Memory allocation**: 10k × 800 B = 8 MB/sec = **691 GB/day** (before GC)
-
-#### MeterReadingSpec
-
-**Memory allocation:**
-- Realistic: 100 ns/op, 0 B/op, 0 allocs/op
-
-**JSON serialization:**
-- Marshal: 1210 ns/op, 800 B/op, 6 allocs/op
-- Unmarshal: 3487 ns/op, 600 B/op, 14 allocs/op
-
-**Key Insights:**
-
-1. **Struct creation is cheap**: <100 ns/op when stack-allocated
-2. **Map allocations are the bottleneck**: Properties/Dimensions cause heap allocations
-3. **JSON serialization dominates CPU**: 1-3 µs per operation
-4. **Memory pressure comes from allocations, not struct size**: 500-700 GB/day at 10k/sec
+**Context:** These measurements are specific to this hardware. Absolute values will differ on other systems, but relative comparisons and orders of magnitude remain meaningful.
 
 ---
 
-### Complete Event Pipeline: End-to-End Size Analysis
+### Complete Event Pipeline: End-to-End JSON Wire Sizes
 
 For a single realistic event through the full pipeline:
 
 ```
 EventPayloadSpec (input)
-  → Go memory: 326 bytes
   → JSON wire: 232 bytes
   ↓
 MeterRecordSpec (metered)
-  → Go memory: 430 bytes
   → JSON wire: 370 bytes
   ↓
-MeterReadingSpec (aggregated, 100:1 compression)
-  → Go memory: 305 bytes
+MeterReadingSpec (aggregated)
   → JSON wire: 364 bytes
 ```
-
-**At 10k events/sec with 100:1 aggregation:**
-
-| Stage | Rate | Go Memory/sec | JSON/sec | Daily (raw) | Daily (aggregated) |
-|-------|------|---------------|----------|-------------|-------------------|
-| EventPayload | 10k/s | 3.26 MB/s | 2.32 MB/s | 282 GB | - |
-| MeterRecord | 10k/s | 4.30 MB/s | 3.70 MB/s | 371 GB | - |
-| MeterReading | 100/s | 30.5 KB/s | 36.4 KB/s | 2.64 GB | **2.64 GB** |
-
-**Key Finding:** Aggregation reduces daily storage from **371 GB to 2.64 GB** (140x compression).
 
 ---
 
@@ -1031,52 +886,152 @@ Use magnetic store for long-term event storage. UUID vs int64 costs **$410/year*
 
 ---
 
-## The Aggregation Game-Changer
+## Aggregation Impact Analysis
 
-**Critical Context from Your Architecture:**
+**Pricing verified as of:** January 28, 2026
 
-From `metering-spec/internal/examples/inflightpostflight_README.md`:
-- Production pattern: **100:1 aggregation ratio**
-- 300 events → 30 1-second readings → 3 10-second readings
-- **Result**: 100x compression from raw events to final storage
+**Baseline assumptions:**
+- 10,000 events/second
+- 24/7 operation = 864M events/day
+- MeterRecord JSON size: 370 bytes
+- Storage pricing: [AWS S3](https://aws.amazon.com/s3/pricing/) $0.023/GB/month, [RDS](https://aws.amazon.com/rds/postgresql/pricing/) $0.115/GB/month, [DynamoDB](https://aws.amazon.com/dynamodb/pricing/) $0.25/GB/month
 
-### Recalculating Costs with Aggregation
+### Complete Cost Comparison: No Aggregation vs 10:1 vs 100:1
 
-**Raw event volume:**
-- 864M events/day × 52 bytes (UUID WorkspaceID) = 44.9 GB/day
+The following tables show storage and ingest costs at different aggregation ratios.
 
-**After 100:1 aggregation:**
-- 8.64M aggregated readings/day × 52 bytes = **449 MB/day**
+---
 
-**Monthly difference (UUID vs int64):**
-- Raw: 1,140 GB/month
-- Aggregated: **11.4 GB/month** (100x smaller)
+#### Scenario 1: No Aggregation (Store All Raw Events)
 
-### Aggregated Storage Costs
+**Data volume:**
+- Events/day: 864M
+- JSON size/event: 370 bytes
+- Daily storage: 864M × 370B = **320 GB/day**
+- Monthly storage: **9,600 GB/month** (9.6 TB)
 
-#### S3 Standard
-- **Monthly cost**: 11.4 GB × $0.023 = **$0.26/month**
-- **Annual cost**: **$3.12/year**
+**Storage costs (monthly, compounding):**
 
-#### RDS PostgreSQL (gp3)
-- **Storage**: 11.4 GB × $0.115 = **$1.31/month**
-- **Annual cost**: **$15.72/year**
+| Service | Price/GB/month | Month 1 | Month 2 | Month 3 | Annual |
+|---------|----------------|---------|---------|---------|---------|
+| **S3 Standard** | $0.023 | $221 | $442 | $662 | **$2,650** |
+| **RDS PostgreSQL** | $0.115 | $1,104 | $2,208 | $3,312 | **$13,248** |
+| **DynamoDB** | $0.25 | $2,400 | $4,800 | $7,200 | **$28,800** |
 
-#### DynamoDB
-- **Storage**: 11.4 GB × $0.25 = **$2.85/month**
-- **Annual cost**: **$34.20/year**
+**Ingest costs (monthly, per 864M writes):**
 
-**Verdict:**
-With aggregation, the UUID vs int64 storage cost difference is **essentially zero** ($3-35/year).
+| Service | Ingest Cost | Monthly | Annual |
+|---------|-------------|---------|--------|
+| **DynamoDB (on-demand writes)** | $1.25/M WRUs | **$32,400** | $388,800 |
+| **RDS (IOPS)** | $0.02/IOPS/month × 7,000 | **$140** | $1,680 |
 
-**Key Architectural Insight:**
+**Total monthly cost (month 1):**
+- S3: $221 storage + $0 ingest = **$221**
+- RDS: $1,104 storage + $140 IOPS = **$1,244**
+- DynamoDB: $2,400 storage + $32,400 writes = **$34,800**
 
-Your metering system's performance comes from **aggregation**, not per-event optimization. The design correctly prioritizes:
-1. ✅ **Flexibility** (strings for cross-system compatibility)
-2. ✅ **Aggregation** (100:1 compression in MeterReadings)
-3. ✅ **Cardinality management** (bounded by workspaces, not events)
+**Key insight:** DynamoDB write costs ($32,400) are **13.5x higher** than storage costs ($2,400).
 
-Optimizing individual event size would be **premature optimization** given the aggregation strategy.
+---
+
+#### Scenario 2: 10:1 Aggregation
+
+**Data volume:**
+- Events/day: 864M → 86.4M readings/day
+- JSON size/reading: 364 bytes
+- Daily storage: 86.4M × 364B = **31.5 GB/day**
+- Monthly storage: **945 GB/month**
+
+**Storage costs (monthly, compounding):**
+
+| Service | Price/GB/month | Month 1 | Month 2 | Month 3 | Annual |
+|---------|----------------|---------|---------|---------|---------|
+| **S3 Standard** | $0.023 | $22 | $43 | $65 | **$260** |
+| **RDS PostgreSQL** | $0.115 | $109 | $217 | $326 | **$1,302** |
+| **DynamoDB** | $0.25 | $236 | $472 | $709 | **$2,835** |
+
+**Ingest costs (monthly, per 86.4M writes):**
+
+| Service | Ingest Cost | Monthly | Annual |
+|---------|-------------|---------|--------|
+| **DynamoDB (on-demand writes)** | $1.25/M WRUs | **$3,240** | $38,880 |
+| **RDS (IOPS)** | Reduced load | **$14** | $168 |
+
+**Total monthly cost (month 1):**
+- S3: $22 storage + $0 ingest = **$22**
+- RDS: $109 storage + $14 IOPS = **$123**
+- DynamoDB: $236 storage + $3,240 writes = **$3,476**
+
+---
+
+#### Scenario 3: 100:1 Aggregation
+
+**Data volume:**
+- Events/day: 864M → 8.64M readings/day
+- JSON size/reading: 364 bytes
+- Daily storage: 8.64M × 364B = **3.15 GB/day**
+- Monthly storage: **94.5 GB/month**
+
+**Storage costs (monthly, compounding):**
+
+| Service | Price/GB/month | Month 1 | Month 2 | Month 3 | Annual |
+|---------|----------------|---------|---------|---------|---------|
+| **S3 Standard** | $0.023 | $2.17 | $4.35 | $6.52 | **$26** |
+| **RDS PostgreSQL** | $0.115 | $10.87 | $21.74 | $32.61 | **$131** |
+| **DynamoDB** | $0.25 | $23.63 | $47.25 | $70.88 | **$284** |
+
+**Ingest costs (monthly, per 8.64M writes):**
+
+| Service | Ingest Cost | Monthly | Annual |
+|---------|-------------|---------|--------|
+| **DynamoDB (on-demand writes)** | $1.25/M WRUs | **$324** | $3,888 |
+| **RDS (IOPS)** | Minimal load | **$1.40** | $17 |
+
+**Total monthly cost (month 1):**
+- S3: $2.17 storage + $0 ingest = **$2.17**
+- RDS: $10.87 storage + $1.40 IOPS = **$12.27**
+- DynamoDB: $23.63 storage + $324 writes = **$348**
+
+---
+
+### Aggregation Comparison Summary
+
+**Monthly costs (Month 1) by aggregation ratio:**
+
+| Service | No Aggregation | 10:1 | 100:1 |
+|---------|----------------|------|-------|
+| **S3** | $221 | $22 | $2.17 |
+| **RDS** | $1,244 | $123 | $12.27 |
+| **DynamoDB** | $34,800 | $3,476 | $348 |
+
+**Annual costs (compounding storage + monthly writes):**
+
+| Service | No Aggregation | 10:1 | 100:1 |
+|---------|----------------|------|-------|
+| **S3** | $2,650 | $260 | $26 |
+| **RDS** | $13,248 | $1,302 | $131 |
+| **DynamoDB storage** | $28,800 | $2,835 | $284 |
+| **DynamoDB writes** | $388,800 | $38,880 | $3,888 |
+| **DynamoDB total** | $417,600 | $41,715 | $4,172 |
+
+**Key observations:**
+
+1. **Storage costs compound monthly** - Each month adds to cumulative storage
+2. **Write costs dominate in DynamoDB** - 93% of total cost at all aggregation levels
+3. **Field size impact is minimal** - 25-byte UUID difference is negligible compared to aggregation ratio impact
+
+### Architectural Insight
+
+The cost profile of a metering system is primarily determined by **aggregation ratio**, not per-event field sizes:
+
+1. **Aggregation ratio** determines order of magnitude: $348/month (100:1) vs $34,800/month (no aggregation)
+2. **Write costs** dominate over storage costs: 93% of DynamoDB cost is writes
+3. **Field size** has minimal impact: 25-byte UUID vs short string difference is negligible within each aggregation scenario
+
+The design prioritizes:
+- **Flexibility** (strings for cross-system compatibility)
+- **Aggregation** (configurable compression ratios)
+- **Cardinality management** (bounded by workspaces, not events)
 
 ---
 
@@ -1401,36 +1356,34 @@ All theoretical size estimates validated within **±5%** of measured values:
 
 **Conclusion:** The sizing methodology in this document is reliable for production planning.
 
-#### 2. Complete Type Sizes
+#### 2. JSON Wire Format Sizes
 
-Measured actual sizes for production workloads:
+Measured from actual serialization benchmarks:
 
-| Type | Go Memory | JSON Wire | PostgreSQL |
-|------|-----------|-----------|------------|
-| EventPayloadSpec (realistic) | 326 bytes | 232 bytes | 132 bytes |
-| MeterRecordSpec (realistic) | 430 bytes | 370 bytes | 190 bytes |
-| MeterReadingSpec (realistic) | 305 bytes | 364 bytes | 132 bytes |
+| Type | JSON Wire Format |
+|------|------------------|
+| EventPayloadSpec (short WorkspaceID) | 232-244 bytes |
+| EventPayloadSpec (UUID WorkspaceID) | 269 bytes |
+| MeterRecordSpec | 370-394 bytes |
+| MeterReadingSpec | 364-388 bytes |
 
 **UUID vs Short String WorkspaceID:**
-- EventPayload: +25 bytes Go memory, +25 bytes JSON
-- MeterRecord: +25 bytes Go memory, +25 bytes JSON
-- MeterReading: +25 bytes Go memory, +25 bytes JSON
+- Adds exactly 25 bytes to JSON wire format: 36 (UUID length) - 11 (short string length)
+- Consistent across all types
 
-**Consistent across all types:** 25 bytes = 36 (UUID) - 11 (short string)
+#### 3. JSON Serialization Performance
 
-#### 3. Performance Is Not a Bottleneck
+Measured on darwin/arm64 (Apple M1 Pro):
+- **Struct creation**: 64-110 ns/op
+- **JSON marshal**: 704-1,210 ns/op
+- **JSON unmarshal**: 2,555-3,704 ns/op
 
-At 10k events/second:
-- **Struct creation**: 64-110 ns/op (negligible CPU)
-- **JSON marshal**: 704-1210 ns/op = 0.7-1.2% CPU
-- **JSON unmarshal**: 2555-3704 ns/op = 2.5-3.7% CPU
-
-**Memory allocation bottleneck:**
+**Memory allocations:**
 - Maps (Properties, Dimensions) cause heap allocations
 - Stack-allocated structs have zero allocations
 - JSON operations: 6-28 allocations per operation
 
-**Key insight:** Performance bottleneck is **JSON serialization and map allocations**, not struct size.
+**Key observation:** JSON encoding takes ~1 µs per operation. Field size differences (25 bytes) have minimal impact on serialization time.
 
 #### 4. Aggregation Dominates Storage Economics
 
@@ -1445,32 +1398,23 @@ With 100:1 aggregation:
 
 **Finding:** Storage cost difference (UUID vs int64) becomes **$3-35/year** after aggregation.
 
-#### 5. Write Costs Dominate at Scale
+#### 5. Write Costs vs Storage Costs
 
 DynamoDB example (10k events/sec, no aggregation):
-- Storage: $285/month (0.87% of cost)
-- Writes: $32,400/month (99.13% of cost)
+- Storage: $285/month (7% of cost)
+- Writes: $32,400/month (93% of cost)
 
-**Finding:** Field size optimization is **irrelevant** compared to write cost reduction through batching and aggregation.
+**Observation:** Write costs dominate at all aggregation levels. Field size optimization has minimal impact on total cost.
 
-#### 6. Memory Pressure from Allocations, Not Size
+### Summary
 
-At 10k events/sec with JSON serialization:
-- **Allocated per second**: 5-8 MB
-- **Daily allocation**: 470-691 GB (before GC)
-- **Actual memory usage**: Depends on GC efficiency, not struct size
+The benchmark results show:
 
-**Finding:** Go's garbage collector handles this easily on modern hardware. The 326-430 byte struct size is negligible compared to allocation churn.
-
-### Recommendations Validated
-
-The benchmark results **strongly support** the original recommendations:
-
-1. ✅ **Use strings for IDs** - Performance impact is negligible (<1% CPU)
-2. ✅ **Optimize through aggregation** - 100x cost reduction validated
-3. ✅ **Storage cost differences are minimal** - $3-35/year after aggregation
-4. ✅ **Focus on write efficiency** - 99% of DynamoDB cost is writes, not storage
-5. ✅ **Flexibility over premature optimization** - Engineering time costs more than cloud savings
+1. **JSON wire format sizes measured**: 232-394 bytes per event
+2. **JSON serialization performance**: 700-3,700 ns/op (hardware-specific)
+3. **Cost profiles at different aggregation ratios**: No aggregation ($34,800/month DynamoDB) vs 100:1 ($348/month)
+4. **Write costs dominate**: 93% of DynamoDB cost is writes, not storage
+5. **Field size impact minimal**: 25-byte UUID difference negligible compared to aggregation ratio impact
 
 ### What the Benchmarks Don't Cover
 
