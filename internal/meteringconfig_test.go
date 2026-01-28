@@ -85,8 +85,8 @@ func TestMeter(t *testing.T) {
 		require.Len(t, recordSpecs, 1)
 
 		record := recordSpecs[0]
-		assert.Equal(t, "1250", record.Measurement.Quantity)
-		assert.Equal(t, "api-tokens", record.Measurement.Unit)
+		assert.Equal(t, "1250", record.Observation.Quantity)
+		assert.Equal(t, "api-tokens", record.Observation.Unit)
 		assert.Equal(t, "customer:acme", record.Subject)
 		assert.Equal(t, "event-123", record.SourceEventID)
 
@@ -130,8 +130,8 @@ func TestMeter(t *testing.T) {
 		// Assert: Verify spec-level results
 		require.NoError(t, err)
 		require.Len(t, recordSpecs, 1)
-		assert.Equal(t, "500", recordSpecs[0].Measurement.Quantity)
-		assert.Equal(t, "test-tokens", recordSpecs[0].Measurement.Unit)
+		assert.Equal(t, "500", recordSpecs[0].Observation.Quantity)
+		assert.Equal(t, "test-tokens", recordSpecs[0].Observation.Unit)
 		assert.Equal(t, "customer:test", recordSpecs[0].Subject)
 		assert.Equal(t, "event-spec", recordSpecs[0].SourceEventID)
 		assert.Equal(t, "gpt-4", recordSpecs[0].Dimensions["model"])
@@ -168,12 +168,12 @@ func TestMeter(t *testing.T) {
 		require.Len(t, recordSpecs, 2, "should create one record per extraction")
 
 		// Verify first record
-		assert.Equal(t, "1250", recordSpecs[0].Measurement.Quantity)
-		assert.Equal(t, "input-tokens", recordSpecs[0].Measurement.Unit)
+		assert.Equal(t, "1250", recordSpecs[0].Observation.Quantity)
+		assert.Equal(t, "input-tokens", recordSpecs[0].Observation.Unit)
 
 		// Verify second record
-		assert.Equal(t, "340", recordSpecs[1].Measurement.Quantity)
-		assert.Equal(t, "output-tokens", recordSpecs[1].Measurement.Unit)
+		assert.Equal(t, "340", recordSpecs[1].Observation.Quantity)
+		assert.Equal(t, "output-tokens", recordSpecs[1].Observation.Unit)
 
 		// Verify dimensions: all extracted properties excluded, only model remains
 		for i, record := range recordSpecs {
