@@ -45,14 +45,32 @@ type MeterRecordSpec struct {
 	// This is the event time from the original event payload, not when the record
 	// was processed. Used for time-based aggregations and billing period assignment.
 	// Distinct from MeteredAt which tracks system processing time.
-	RecordedAt time.Time `json:"recordedAt"`
+	//
+	// DEPRECATED: Use ObservedAt instead. Will be removed in Phase 3.
+	RecordedAt time.Time `json:"recordedAt,omitempty"`
+
+	// Business timestamp indicating when the usage was observed.
+	//
+	// This is the event time from the original event payload, not when the record
+	// was processed. Replaces RecordedAt with clearer naming. For instant observations,
+	// this matches Observation.Window.Start (and Window.End).
+	ObservedAt time.Time `json:"observedAt,omitempty"`
 
 	// The measured quantity with its unit.
 	//
 	// Contains both the numeric quantity (as a decimal string for precision) and
 	// the unit identifier (e.g., "api-calls", "tokens", "gb-hours"). The unit
 	// determines how this measurement aggregates and gets rated for billing.
-	Measurement MeasurementSpec `json:"measurement"`
+	//
+	// DEPRECATED: Use Observation instead. Will be removed in Phase 3.
+	Measurement MeasurementSpec `json:"measurement,omitempty"`
+
+	// The observed quantity with its unit and temporal context.
+	//
+	// Replaces Measurement with explicit temporal extent (Window field). For instant
+	// observations (gauges, discrete events), Window.Start == Window.End. For time-spanning
+	// observations (compute duration), Window.Start < Window.End.
+	Observation ObservationSpec `json:"observation,omitempty"`
 
 	// Additional categorical attributes from the source event.
 	//
