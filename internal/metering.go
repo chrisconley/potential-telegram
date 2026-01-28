@@ -64,8 +64,7 @@ func Meter(payloadSpec specs.EventPayloadSpec, configSpec specs.MeteringConfigSp
 			UniverseID:    firstRecord.UniverseID.ToString(),
 			Subject:       firstRecord.Subject.ToString(),
 			ObservedAt:    observedAt,
-			Observations:  observations,                      // NEW: all observations
-			Observation:   observations[0],                   // OLD: first one for backwards compat
+			Observations:  observations,
 			Dimensions:    convertDimensionsToMap(firstRecord.Dimensions),
 			SourceEventID: firstRecord.SourceEventID.ToString(),
 			MeteredAt:     firstRecord.MeteredAt.ToTime(),
@@ -150,11 +149,13 @@ func meter(payload EventPayload, config MeteringConfig) ([]MeterRecord, error) {
 			UniverseID:  payload.UniverseID.ToString(),
 			Subject:     payload.Subject.ToString(),
 			ObservedAt:  observedAt,
-			Observation: specs.NewInstantObservation(
-				quantity.String(),
-				extraction.Unit().ToString(),
-				observedAt,
-			),
+			Observations: []specs.ObservationSpec{
+				specs.NewInstantObservation(
+					quantity.String(),
+					extraction.Unit().ToString(),
+					observedAt,
+				),
+			},
 			Dimensions:    dimensionsMap,
 			SourceEventID: payload.ID.ToString(),
 			// MeteredAt will default to time.Now() in NewMeterRecord

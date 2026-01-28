@@ -114,7 +114,7 @@ func TestMeterRecordSizeBreakdown(t *testing.T) {
 				UniverseID:    "",
 				Subject:       "",
 				ObservedAt:    time.Time{},
-				Observation:   specs.ObservationSpec{Quantity: "", Unit: "", Window: specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}}},
+				Observations:  []specs.ObservationSpec{{Quantity: "", Unit: "", Window: specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}}}},
 				Dimensions:    nil,
 				SourceEventID: "",
 				MeteredAt:     time.Time{},
@@ -130,11 +130,11 @@ func TestMeterRecordSizeBreakdown(t *testing.T) {
 					UniverseID:  "prod",
 					Subject:     "customer:cust_abc123",
 					ObservedAt:  observedAt,
-					Observation: specs.ObservationSpec{
+					Observations: []specs.ObservationSpec{{
 						Quantity: "1500",
 						Unit:     "tokens",
 						Window:   specs.TimeWindowSpec{Start: observedAt, End: observedAt},
-					},
+					}},
 					Dimensions: map[string]string{
 						"model":    "gpt-4",
 						"endpoint": "/api/completions",
@@ -308,11 +308,13 @@ func estimateMeterRecordSize(r specs.MeterRecordSpec) int {
 	size += 24 // ObservedAt
 	size += 24 // MeteredAt
 
-	// ObservationSpec
-	size += 16 + len(r.Observation.Quantity)
-	size += 16 + len(r.Observation.Unit)
-	size += 24 // Observation.Window.Start
-	size += 24 // Observation.Window.End
+	// Observations array
+	for _, obs := range r.Observations {
+		size += 16 + len(obs.Quantity)
+		size += 16 + len(obs.Unit)
+		size += 24 // obs.Window.Start
+		size += 24 // obs.Window.End
+	}
 
 	// Dimensions map
 	if r.Dimensions != nil {
@@ -409,14 +411,18 @@ func estimateMeterRecordPostgresSize(r specs.MeterRecordSpec) int {
 	size += 1 + len(r.UniverseID)
 	size += 1 + len(r.Subject)
 	size += 1 + len(r.SourceEventID)
-	size += 1 + len(r.Observation.Quantity)
-	size += 1 + len(r.Observation.Unit)
+	for _, obs := range r.Observations {
+		size += 1 + len(obs.Quantity)
+		size += 1 + len(obs.Unit)
+	}
 
 	// TIMESTAMPs
 	size += 8 // ObservedAt
 	size += 8 // MeteredAt
-	size += 8 // Observation.Window.Start
-	size += 8 // Observation.Window.End
+	for range r.Observations {
+		size += 8 // Observation.Window.Start
+		size += 8 // Observation.Window.End
+	}
 
 	// JSONB for dimensions
 	if r.Dimensions != nil && len(r.Dimensions) > 0 {

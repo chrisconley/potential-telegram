@@ -54,25 +54,13 @@ type MeterRecordSpec struct {
 	// Distinct from MeteredAt which tracks system processing time.
 	ObservedAt time.Time `json:"observedAt"`
 
-	// Multiple observations from the same event (preferred).
+	// Multiple observations from the same event.
 	//
 	// Contains all observations extracted from a single event, ensuring atomic
 	// persistence. When one event produces multiple measurements (e.g., LLM API call
 	// with input_tokens and output_tokens), all observations are bundled in this array.
 	// This provides natural atomicity: saving the record persists all observations or none.
-	//
-	// Preferred over the singular Observation field. During migration, both fields
-	// may be populated for backwards compatibility.
-	Observations []ObservationSpec `json:"observations,omitempty"`
-
-	// Single observation (deprecated, for backwards compatibility).
-	//
-	// DEPRECATED: Use Observations array instead. This field is maintained during
-	// migration for backwards compatibility. When Observations is populated, this
-	// field typically contains the first observation from the array.
-	//
-	// Will be removed in a future version once all consumers migrate to Observations.
-	Observation ObservationSpec `json:"observation,omitempty"`
+	Observations []ObservationSpec `json:"observations"`
 
 	// Additional categorical attributes from the source event.
 	//

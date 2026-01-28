@@ -19,7 +19,7 @@ func BenchmarkMeterRecord_Minimal_Memory(b *testing.B) {
 			UniverseID:    "",
 			Subject:       "",
 			ObservedAt:    time.Time{},
-			Observation:   specs.ObservationSpec{Quantity: "", Unit: "", Window: specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}}},
+			Observations:  []specs.ObservationSpec{{Quantity: "", Unit: "", Window: specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}}}},
 			Dimensions:    nil,
 			SourceEventID: "",
 			MeteredAt:     time.Time{},
@@ -39,11 +39,11 @@ func BenchmarkMeterRecord_Realistic_Memory(b *testing.B) {
 			UniverseID:  "prod",
 			Subject:     "customer:cust_abc123",
 			ObservedAt:  now,
-			Observation: specs.ObservationSpec{
+			Observations: []specs.ObservationSpec{{
 				Quantity: "1500",
 				Unit:     "tokens",
 				Window:   specs.TimeWindowSpec{Start: now, End: now},
-			},
+			}},
 			Dimensions: map[string]string{
 				"model":    "gpt-4",
 				"endpoint": "/api/completions",
@@ -66,11 +66,11 @@ func BenchmarkMeterRecord_LargeDimensions_Memory(b *testing.B) {
 			UniverseID:  "prod",
 			Subject:     "customer:cust_abc123",
 			ObservedAt:  now,
-			Observation: specs.ObservationSpec{
+			Observations: []specs.ObservationSpec{{
 				Quantity: "1500",
 				Unit:     "tokens",
 				Window:   specs.TimeWindowSpec{Start: now, End: now},
-			},
+			}},
 			Dimensions: map[string]string{
 				"model":            "gpt-4",
 				"endpoint":         "/api/completions",
@@ -98,11 +98,11 @@ func BenchmarkMeterRecord_Realistic_JSONMarshal(b *testing.B) {
 		UniverseID:  "prod",
 		Subject:     "customer:cust_abc123",
 		ObservedAt:  observedAt,
-		Observation: specs.ObservationSpec{
+		Observations: []specs.ObservationSpec{{
 			Quantity: "1500",
 			Unit:     "tokens",
 			Window:   specs.TimeWindowSpec{Start: observedAt, End: observedAt},
-		},
+		}},
 		Dimensions: map[string]string{
 			"model":    "gpt-4",
 			"endpoint": "/api/completions",
@@ -167,11 +167,11 @@ func BenchmarkMeterRecord_Realistic_JSONRoundtrip(b *testing.B) {
 		UniverseID:  "prod",
 		Subject:     "customer:cust_abc123",
 		ObservedAt:  observedAt,
-		Observation: specs.ObservationSpec{
+		Observations: []specs.ObservationSpec{{
 			Quantity: "1500",
 			Unit:     "tokens",
 			Window:   specs.TimeWindowSpec{Start: observedAt, End: observedAt},
-		},
+		}},
 		Dimensions: map[string]string{
 			"model":    "gpt-4",
 			"endpoint": "/api/completions",
@@ -211,7 +211,7 @@ func BenchmarkMeterRecord_JSONSize(b *testing.B) {
 				UniverseID:    "",
 				Subject:       "",
 				ObservedAt:    time.Time{},
-				Observation:   specs.ObservationSpec{Quantity: "", Unit: "", Window: specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}}},
+				Observations:  []specs.ObservationSpec{{Quantity: "", Unit: "", Window: specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}}}},
 				Dimensions:    nil,
 				SourceEventID: "",
 				MeteredAt:     time.Time{},
@@ -227,11 +227,11 @@ func BenchmarkMeterRecord_JSONSize(b *testing.B) {
 					UniverseID:  "prod",
 					Subject:     "customer:cust_abc123",
 					ObservedAt:  observedAt,
-					Observation: specs.ObservationSpec{
+					Observations: []specs.ObservationSpec{{
 						Quantity: "1500",
 						Unit:     "tokens",
 						Window:   specs.TimeWindowSpec{Start: observedAt, End: observedAt},
-					},
+					}},
 					Dimensions: map[string]string{
 						"model":    "gpt-4",
 						"endpoint": "/api/completions",
@@ -251,11 +251,11 @@ func BenchmarkMeterRecord_JSONSize(b *testing.B) {
 					UniverseID:  "prod",
 					Subject:     "customer:cust_abc123",
 					ObservedAt:  observedAt,
-					Observation: specs.ObservationSpec{
+					Observations: []specs.ObservationSpec{{
 						Quantity: "1500",
 						Unit:     "tokens",
 						Window:   specs.TimeWindowSpec{Start: observedAt, End: observedAt},
-					},
+					}},
 					Dimensions: map[string]string{
 						"model":            "gpt-4",
 						"endpoint":         "/api/completions",

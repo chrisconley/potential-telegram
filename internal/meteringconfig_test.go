@@ -85,8 +85,9 @@ func TestMeter(t *testing.T) {
 		require.Len(t, recordSpecs, 1)
 
 		record := recordSpecs[0]
-		assert.Equal(t, "1250", record.Observation.Quantity)
-		assert.Equal(t, "api-tokens", record.Observation.Unit)
+		require.Len(t, record.Observations, 1)
+		assert.Equal(t, "1250", record.Observations[0].Quantity)
+		assert.Equal(t, "api-tokens", record.Observations[0].Unit)
 		assert.Equal(t, "customer:acme", record.Subject)
 		assert.Equal(t, "event-123", record.SourceEventID)
 
@@ -130,8 +131,9 @@ func TestMeter(t *testing.T) {
 		// Assert: Verify spec-level results
 		require.NoError(t, err)
 		require.Len(t, recordSpecs, 1)
-		assert.Equal(t, "500", recordSpecs[0].Observation.Quantity)
-		assert.Equal(t, "test-tokens", recordSpecs[0].Observation.Unit)
+		require.Len(t, recordSpecs[0].Observations, 1)
+		assert.Equal(t, "500", recordSpecs[0].Observations[0].Quantity)
+		assert.Equal(t, "test-tokens", recordSpecs[0].Observations[0].Unit)
 		assert.Equal(t, "customer:test", recordSpecs[0].Subject)
 		assert.Equal(t, "event-spec", recordSpecs[0].SourceEventID)
 		assert.Equal(t, "gpt-4", recordSpecs[0].Dimensions["model"])
@@ -175,10 +177,6 @@ func TestMeter(t *testing.T) {
 		assert.Equal(t, "input-tokens", record.Observations[0].Unit)
 		assert.Equal(t, "340", record.Observations[1].Quantity)
 		assert.Equal(t, "output-tokens", record.Observations[1].Unit)
-
-		// Verify backwards compatibility (old field contains first observation)
-		assert.Equal(t, "1250", record.Observation.Quantity)
-		assert.Equal(t, "input-tokens", record.Observation.Unit)
 
 		// Verify dimensions: all extracted properties excluded, only model remains
 		assert.Equal(t, "gpt-4", record.Dimensions["model"], "should have non-extracted dimension")

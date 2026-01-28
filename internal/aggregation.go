@@ -17,11 +17,10 @@ func unbundleObservations(recordSpecs []specs.MeterRecordSpec) []specs.MeterReco
 	result := make([]specs.MeterRecordSpec, 0, len(recordSpecs))
 
 	for _, spec := range recordSpecs {
-		// Try new field first (Observations array)
+		// Each spec should have observations array populated
 		observations := spec.Observations
 		if len(observations) == 0 {
-			// Fall back to old field (singular Observation) for backwards compatibility
-			observations = []specs.ObservationSpec{spec.Observation}
+			continue // Skip records with no observations
 		}
 
 		// Create one spec per observation
@@ -32,7 +31,7 @@ func unbundleObservations(recordSpecs []specs.MeterRecordSpec) []specs.MeterReco
 				UniverseID:    spec.UniverseID,
 				Subject:       spec.Subject,
 				ObservedAt:    spec.ObservedAt,
-				Observation:   observation,  // Single observation for this unbundled spec
+				Observations:  []specs.ObservationSpec{observation}, // Single observation in array
 				Dimensions:    spec.Dimensions,
 				SourceEventID: spec.SourceEventID,
 				MeteredAt:     spec.MeteredAt,
