@@ -39,21 +39,21 @@ func NewMeterRecord(spec specs.MeterRecordSpec) (MeterRecord, error) {
 		return MeterRecord{}, fmt.Errorf("invalid subject: %w", err)
 	}
 
-	quantity, err := NewDecimal(spec.Measurement.Quantity)
+	quantity, err := NewDecimal(spec.Observation.Quantity)
 	if err != nil {
 		return MeterRecord{}, fmt.Errorf("invalid quantity: %w", err)
 	}
 
-	unit, err := NewMeasurementUnit(spec.Measurement.Unit)
+	unit, err := NewMeasurementUnit(spec.Observation.Unit)
 	if err != nil {
 		return MeterRecord{}, fmt.Errorf("invalid unit: %w", err)
 	}
 
 	measurement := NewMeasurement(quantity, unit)
 
-	recordedAt, err := NewMeterRecordRecordedAt(spec.RecordedAt)
+	recordedAt, err := NewMeterRecordRecordedAt(spec.ObservedAt)
 	if err != nil {
-		return MeterRecord{}, fmt.Errorf("invalid recorded at: %w", err)
+		return MeterRecord{}, fmt.Errorf("invalid observed at: %w", err)
 	}
 
 	dimensions := NewMeterRecordDimensions()

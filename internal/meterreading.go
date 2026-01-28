@@ -45,12 +45,12 @@ func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
 		return MeterReading{}, fmt.Errorf("invalid window: %w", err)
 	}
 
-	quantity, err := NewDecimal(spec.Measurement.Quantity)
+	quantity, err := NewDecimal(spec.Value.Quantity)
 	if err != nil {
 		return MeterReading{}, fmt.Errorf("invalid quantity: %w", err)
 	}
 
-	unit, err := NewMeasurementUnit(spec.Measurement.Unit)
+	unit, err := NewMeasurementUnit(spec.Value.Unit)
 	if err != nil {
 		return MeterReading{}, fmt.Errorf("invalid unit: %w", err)
 	}
