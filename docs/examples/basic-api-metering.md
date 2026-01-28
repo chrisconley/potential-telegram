@@ -66,10 +66,14 @@ The `Meter` function transforms the event using the config:
   "workspaceID": "acme-prod",
   "universeID": "production",
   "subject": "customer:acme-corp",
-  "recordedAt": "2024-01-15T10:30:45Z",
-  "measurement": {
+  "observedAt": "2024-01-15T10:30:45Z",
+  "observation": {
     "quantity": "145",
-    "unit": "milliseconds"
+    "unit": "milliseconds",
+    "window": {
+      "start": "2024-01-15T10:30:45Z",
+      "end": "2024-01-15T10:30:45Z"
+    }
   },
   "dimensions": {
     "endpoint": "/api/v1/users",
@@ -82,7 +86,8 @@ The `Meter` function transforms the event using the config:
 ```
 
 **What happened:**
-- Extracted `response_time_ms` → `measurement.quantity` with `unit: "milliseconds"`
+- Extracted `response_time_ms` → `observation.quantity` with `unit: "milliseconds"`
+- Created instant observation with `window: [T, T]` where T = event time
 - Passed through remaining properties as `dimensions`
 - Generated deterministic `id` from source event ID + unit
 - Added `meteredAt` timestamp for watermarking
@@ -121,7 +126,7 @@ The `Aggregate` function combines meter records in the window:
     "start": "2024-01-15T00:00:00Z",
     "end": "2024-01-16T00:00:00Z"
   },
-  "measurement": {
+  "value": {
     "quantity": "14523",
     "unit": "milliseconds"
   },
@@ -146,13 +151,14 @@ The `Aggregate` function combines meter records in the window:
 EventPayload                    MeterRecord                   MeterReading
 ────────────                    ───────────                   ────────────
 {                               {                             {
-  properties: {          →        measurement: {       →        measurement: {
+  properties: {          →        observation: {       →        value: {
     response_time_ms: "145"         quantity: "145"               quantity: "14523"
   }                                 unit: "milliseconds"          unit: "milliseconds"
-}                               }                             }
-                                dimensions: {                 aggregation: "sum"
-                                  endpoint: "/api/users"      recordCount: 100
-                                  region: "us-east-1"       }
+}                                   window: [T, T]            }
+                                }                             aggregation: "sum"
+                                dimensions: {                 recordCount: 100
+                                  endpoint: "/api/users"    }
+                                  region: "us-east-1"
                                 }
                               }
 
@@ -170,8 +176,8 @@ The event payload uses untyped `properties`. You can add new properties (e.g., `
 If you replay `evt_abc123` with the same metering config, you get the same meter record ID. This enables idempotency: your implementation can check if this ID already exists before creating a new record, preventing double-billing.
 
 ### Separation of Concerns
-- **Metering**: Extracts and types measurements from events
-- **Aggregation**: Combines measurements over time windows
+- **Metering**: Extracts and types observations from events
+- **Aggregation**: Combines observations over time windows into aggregate values
 - **Rating**: (Not shown) Multiplies quantities by rates to get prices
 
 ### Dimensional Filtering
