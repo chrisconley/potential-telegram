@@ -30,7 +30,7 @@ Current pattern: Single type (`MeasurementSpec`) used for both:
 
 Target pattern: Separate types:
 1. `ObservationSpec` (with Window) for `MeterRecord`
-2. `AggregatedValueSpec` (without Window) for `MeterReading`
+2. `AggregateSpec` (without Window) for `MeterReading`
 
 ### Migration Strategy
 
@@ -45,8 +45,8 @@ Use Add-Migrate-Remove pattern:
 
 ### Step 1.1: Create new observation types
 **File:** `specs/observation.go`
-**Action:** Add `ObservationSpec` and `AggregatedValueSpec`
-**Commit:** "Add ObservationSpec and AggregatedValueSpec types"
+**Action:** Add `ObservationSpec` and `AggregateSpec`
+**Commit:** "Add ObservationSpec and AggregateSpec types"
 
 ✅ **Safety check:** `go test ./...` passes
 
@@ -63,7 +63,7 @@ Use Add-Migrate-Remove pattern:
 ### Step 1.3: Add new field to MeterReadingSpec (parallel)
 **File:** `specs/meterreading.go`
 **Action:**
-- Add `Value AggregatedValueSpec` field
+- Add `Value AggregateSpec` field
 - Keep existing `Measurement` field
 **Commit:** "Add Value field to MeterReadingSpec"
 
