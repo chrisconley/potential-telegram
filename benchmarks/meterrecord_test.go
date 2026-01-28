@@ -18,8 +18,8 @@ func BenchmarkMeterRecord_Minimal_Memory(b *testing.B) {
 			WorkspaceID:   "",
 			UniverseID:    "",
 			Subject:       "",
-			RecordedAt:    time.Time{},
-			Measurement:   specs.MeasurementSpec{Quantity: "", Unit: ""},
+			ObservedAt:    time.Time{},
+			Observation:   specs.ObservationSpec{Quantity: "", Unit: "", Window: specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}}},
 			Dimensions:    nil,
 			SourceEventID: "",
 			MeteredAt:     time.Time{},
@@ -31,23 +31,25 @@ func BenchmarkMeterRecord_Minimal_Memory(b *testing.B) {
 func BenchmarkMeterRecord_Realistic_Memory(b *testing.B) {
 	b.ReportAllocs()
 
+	now := time.Now()
 	for i := 0; i < b.N; i++ {
 		_ = specs.MeterRecordSpec{
 			ID:          "mr_550e8400-e29b-41d4-a716-446655440000",
 			WorkspaceID: "ws_a1b2c3d4",
 			UniverseID:  "prod",
 			Subject:     "customer:cust_abc123",
-			RecordedAt:  time.Now(),
-			Measurement: specs.MeasurementSpec{
+			ObservedAt:  now,
+			Observation: specs.ObservationSpec{
 				Quantity: "1500",
 				Unit:     "tokens",
+				Window:   specs.TimeWindowSpec{Start: now, End: now},
 			},
 			Dimensions: map[string]string{
 				"model":    "gpt-4",
 				"endpoint": "/api/completions",
 			},
 			SourceEventID: "evt_550e8400-e29b-41d4-a716-446655440000",
-			MeteredAt:     time.Now(),
+			MeteredAt:     now,
 		}
 	}
 }
@@ -56,16 +58,18 @@ func BenchmarkMeterRecord_Realistic_Memory(b *testing.B) {
 func BenchmarkMeterRecord_LargeDimensions_Memory(b *testing.B) {
 	b.ReportAllocs()
 
+	now := time.Now()
 	for i := 0; i < b.N; i++ {
 		_ = specs.MeterRecordSpec{
 			ID:          "mr_550e8400-e29b-41d4-a716-446655440000",
 			WorkspaceID: "ws_a1b2c3d4",
 			UniverseID:  "prod",
 			Subject:     "customer:cust_abc123",
-			RecordedAt:  time.Now(),
-			Measurement: specs.MeasurementSpec{
+			ObservedAt:  now,
+			Observation: specs.ObservationSpec{
 				Quantity: "1500",
 				Unit:     "tokens",
+				Window:   specs.TimeWindowSpec{Start: now, End: now},
 			},
 			Dimensions: map[string]string{
 				"model":            "gpt-4",
@@ -80,22 +84,24 @@ func BenchmarkMeterRecord_LargeDimensions_Memory(b *testing.B) {
 				"team":             "engineering",
 			},
 			SourceEventID: "evt_550e8400-e29b-41d4-a716-446655440000",
-			MeteredAt:     time.Now(),
+			MeteredAt:     now,
 		}
 	}
 }
 
 // Benchmark JSON serialization of realistic MeterRecordSpec
 func BenchmarkMeterRecord_Realistic_JSONMarshal(b *testing.B) {
+	observedAt := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
 	record := specs.MeterRecordSpec{
 		ID:          "mr_550e8400-e29b-41d4-a716-446655440000",
 		WorkspaceID: "ws_a1b2c3d4",
 		UniverseID:  "prod",
 		Subject:     "customer:cust_abc123",
-		RecordedAt:  time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC),
-		Measurement: specs.MeasurementSpec{
+		ObservedAt:  observedAt,
+		Observation: specs.ObservationSpec{
 			Quantity: "1500",
 			Unit:     "tokens",
+			Window:   specs.TimeWindowSpec{Start: observedAt, End: observedAt},
 		},
 		Dimensions: map[string]string{
 			"model":    "gpt-4",
@@ -123,10 +129,14 @@ func BenchmarkMeterRecord_Realistic_JSONUnmarshal(b *testing.B) {
 		"workspaceID": "ws_a1b2c3d4",
 		"universeID": "prod",
 		"subject": "customer:cust_abc123",
-		"recordedAt": "2024-01-01T10:00:00Z",
-		"measurement": {
+		"observedAt": "2024-01-01T10:00:00Z",
+		"observation": {
 			"quantity": "1500",
-			"unit": "tokens"
+			"unit": "tokens",
+			"window": {
+				"start": "2024-01-01T10:00:00Z",
+				"end": "2024-01-01T10:00:00Z"
+			}
 		},
 		"dimensions": {
 			"model": "gpt-4",
@@ -150,15 +160,17 @@ func BenchmarkMeterRecord_Realistic_JSONUnmarshal(b *testing.B) {
 
 // Benchmark JSON roundtrip
 func BenchmarkMeterRecord_Realistic_JSONRoundtrip(b *testing.B) {
+	observedAt := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
 	record := specs.MeterRecordSpec{
 		ID:          "mr_550e8400-e29b-41d4-a716-446655440000",
 		WorkspaceID: "ws_a1b2c3d4",
 		UniverseID:  "prod",
 		Subject:     "customer:cust_abc123",
-		RecordedAt:  time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC),
-		Measurement: specs.MeasurementSpec{
+		ObservedAt:  observedAt,
+		Observation: specs.ObservationSpec{
 			Quantity: "1500",
 			Unit:     "tokens",
+			Window:   specs.TimeWindowSpec{Start: observedAt, End: observedAt},
 		},
 		Dimensions: map[string]string{
 			"model":    "gpt-4",
@@ -198,8 +210,8 @@ func BenchmarkMeterRecord_JSONSize(b *testing.B) {
 				WorkspaceID:   "",
 				UniverseID:    "",
 				Subject:       "",
-				RecordedAt:    time.Time{},
-				Measurement:   specs.MeasurementSpec{Quantity: "", Unit: ""},
+				ObservedAt:    time.Time{},
+				Observation:   specs.ObservationSpec{Quantity: "", Unit: "", Window: specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}}},
 				Dimensions:    nil,
 				SourceEventID: "",
 				MeteredAt:     time.Time{},
@@ -207,51 +219,59 @@ func BenchmarkMeterRecord_JSONSize(b *testing.B) {
 		},
 		{
 			name: "Realistic",
-			record: specs.MeterRecordSpec{
-				ID:          "mr_550e8400-e29b-41d4-a716-446655440000",
-				WorkspaceID: "ws_a1b2c3d4",
-				UniverseID:  "prod",
-				Subject:     "customer:cust_abc123",
-				RecordedAt:  time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC),
-				Measurement: specs.MeasurementSpec{
-					Quantity: "1500",
-					Unit:     "tokens",
-				},
-				Dimensions: map[string]string{
-					"model":    "gpt-4",
-					"endpoint": "/api/completions",
-				},
-				SourceEventID: "evt_550e8400-e29b-41d4-a716-446655440000",
-				MeteredAt:     time.Date(2024, 1, 1, 10, 0, 1, 0, time.UTC),
-			},
+			record: func() specs.MeterRecordSpec {
+				observedAt := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+				return specs.MeterRecordSpec{
+					ID:          "mr_550e8400-e29b-41d4-a716-446655440000",
+					WorkspaceID: "ws_a1b2c3d4",
+					UniverseID:  "prod",
+					Subject:     "customer:cust_abc123",
+					ObservedAt:  observedAt,
+					Observation: specs.ObservationSpec{
+						Quantity: "1500",
+						Unit:     "tokens",
+						Window:   specs.TimeWindowSpec{Start: observedAt, End: observedAt},
+					},
+					Dimensions: map[string]string{
+						"model":    "gpt-4",
+						"endpoint": "/api/completions",
+					},
+					SourceEventID: "evt_550e8400-e29b-41d4-a716-446655440000",
+					MeteredAt:     time.Date(2024, 1, 1, 10, 0, 1, 0, time.UTC),
+				}
+			}(),
 		},
 		{
 			name: "LargeDimensions",
-			record: specs.MeterRecordSpec{
-				ID:          "mr_550e8400-e29b-41d4-a716-446655440000",
-				WorkspaceID: "ws_a1b2c3d4",
-				UniverseID:  "prod",
-				Subject:     "customer:cust_abc123",
-				RecordedAt:  time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC),
-				Measurement: specs.MeasurementSpec{
-					Quantity: "1500",
-					Unit:     "tokens",
-				},
-				Dimensions: map[string]string{
-					"model":            "gpt-4",
-					"endpoint":         "/api/completions",
-					"status_code":      "200",
-					"region":           "us-east-1",
-					"cached":           "false",
-					"response_time_ms": "245",
-					"input_tokens":     "450",
-					"output_tokens":    "890",
-					"feature_flag":     "new_ui_enabled",
-					"team":             "engineering",
-				},
-				SourceEventID: "evt_550e8400-e29b-41d4-a716-446655440000",
-				MeteredAt:     time.Date(2024, 1, 1, 10, 0, 1, 0, time.UTC),
-			},
+			record: func() specs.MeterRecordSpec {
+				observedAt := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
+				return specs.MeterRecordSpec{
+					ID:          "mr_550e8400-e29b-41d4-a716-446655440000",
+					WorkspaceID: "ws_a1b2c3d4",
+					UniverseID:  "prod",
+					Subject:     "customer:cust_abc123",
+					ObservedAt:  observedAt,
+					Observation: specs.ObservationSpec{
+						Quantity: "1500",
+						Unit:     "tokens",
+						Window:   specs.TimeWindowSpec{Start: observedAt, End: observedAt},
+					},
+					Dimensions: map[string]string{
+						"model":            "gpt-4",
+						"endpoint":         "/api/completions",
+						"status_code":      "200",
+						"region":           "us-east-1",
+						"cached":           "false",
+						"response_time_ms": "245",
+						"input_tokens":     "450",
+						"output_tokens":    "890",
+						"feature_flag":     "new_ui_enabled",
+						"team":             "engineering",
+					},
+					SourceEventID: "evt_550e8400-e29b-41d4-a716-446655440000",
+					MeteredAt:     time.Date(2024, 1, 1, 10, 0, 1, 0, time.UTC),
+				}
+			}(),
 		},
 	}
 

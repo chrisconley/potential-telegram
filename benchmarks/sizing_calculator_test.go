@@ -113,8 +113,8 @@ func TestMeterRecordSizeBreakdown(t *testing.T) {
 				WorkspaceID:   "",
 				UniverseID:    "",
 				Subject:       "",
-				RecordedAt:    time.Time{},
-				Measurement:   specs.MeasurementSpec{Quantity: "", Unit: ""},
+				ObservedAt:    time.Time{},
+				Observation:   specs.ObservationSpec{Quantity: "", Unit: "", Window: specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}}},
 				Dimensions:    nil,
 				SourceEventID: "",
 				MeteredAt:     time.Time{},
@@ -122,23 +122,27 @@ func TestMeterRecordSizeBreakdown(t *testing.T) {
 		},
 		{
 			name: "Realistic",
-			record: specs.MeterRecordSpec{
-				ID:          "mr_550e8400-e29b-41d4-a716-446655440000",
-				WorkspaceID: "ws_a1b2c3d4",
-				UniverseID:  "prod",
-				Subject:     "customer:cust_abc123",
-				RecordedAt:  time.Now(),
-				Measurement: specs.MeasurementSpec{
-					Quantity: "1500",
-					Unit:     "tokens",
-				},
-				Dimensions: map[string]string{
-					"model":    "gpt-4",
-					"endpoint": "/api/completions",
-				},
-				SourceEventID: "evt_550e8400-e29b-41d4-a716-446655440000",
-				MeteredAt:     time.Now(),
-			},
+			record: func() specs.MeterRecordSpec {
+				observedAt := time.Now()
+				return specs.MeterRecordSpec{
+					ID:          "mr_550e8400-e29b-41d4-a716-446655440000",
+					WorkspaceID: "ws_a1b2c3d4",
+					UniverseID:  "prod",
+					Subject:     "customer:cust_abc123",
+					ObservedAt:  observedAt,
+					Observation: specs.ObservationSpec{
+						Quantity: "1500",
+						Unit:     "tokens",
+						Window:   specs.TimeWindowSpec{Start: observedAt, End: observedAt},
+					},
+					Dimensions: map[string]string{
+						"model":    "gpt-4",
+						"endpoint": "/api/completions",
+					},
+					SourceEventID: "evt_550e8400-e29b-41d4-a716-446655440000",
+					MeteredAt:     observedAt,
+				}
+			}(),
 		},
 	}
 
@@ -173,7 +177,7 @@ func TestMeterReadingSizeBreakdown(t *testing.T) {
 				UniverseID:   "",
 				Subject:      "",
 				Window:       specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}},
-				Measurement:  specs.MeasurementSpec{Quantity: "", Unit: ""},
+				Value:        specs.AggregateSpec{Quantity: "", Unit: ""},
 				Aggregation:  "",
 				RecordCount:  0,
 				CreatedAt:    time.Time{},
@@ -191,7 +195,7 @@ func TestMeterReadingSizeBreakdown(t *testing.T) {
 					Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 					End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 				},
-				Measurement: specs.MeasurementSpec{
+				Value: specs.AggregateSpec{
 					Quantity: "12500",
 					Unit:     "tokens",
 				},
@@ -301,12 +305,14 @@ func estimateMeterRecordSize(r specs.MeterRecordSpec) int {
 	size += 16 + len(r.SourceEventID)
 
 	// time.Time fields
-	size += 24 // RecordedAt
+	size += 24 // ObservedAt
 	size += 24 // MeteredAt
 
-	// MeasurementSpec
-	size += 16 + len(r.Measurement.Quantity)
-	size += 16 + len(r.Measurement.Unit)
+	// ObservationSpec
+	size += 16 + len(r.Observation.Quantity)
+	size += 16 + len(r.Observation.Unit)
+	size += 24 // Observation.Window.Start
+	size += 24 // Observation.Window.End
 
 	// Dimensions map
 	if r.Dimensions != nil {
@@ -334,9 +340,9 @@ func estimateMeterReadingSize(r specs.MeterReadingSpec) int {
 	size += 24 // Start
 	size += 24 // End
 
-	// MeasurementSpec
-	size += 16 + len(r.Measurement.Quantity)
-	size += 16 + len(r.Measurement.Unit)
+	// AggregateSpec
+	size += 16 + len(r.Value.Quantity)
+	size += 16 + len(r.Value.Unit)
 
 	// int field
 	size += 8 // RecordCount
@@ -403,12 +409,14 @@ func estimateMeterRecordPostgresSize(r specs.MeterRecordSpec) int {
 	size += 1 + len(r.UniverseID)
 	size += 1 + len(r.Subject)
 	size += 1 + len(r.SourceEventID)
-	size += 1 + len(r.Measurement.Quantity)
-	size += 1 + len(r.Measurement.Unit)
+	size += 1 + len(r.Observation.Quantity)
+	size += 1 + len(r.Observation.Unit)
 
 	// TIMESTAMPs
-	size += 8 // RecordedAt
+	size += 8 // ObservedAt
 	size += 8 // MeteredAt
+	size += 8 // Observation.Window.Start
+	size += 8 // Observation.Window.End
 
 	// JSONB for dimensions
 	if r.Dimensions != nil && len(r.Dimensions) > 0 {
@@ -431,8 +439,8 @@ func estimateMeterReadingPostgresSize(r specs.MeterReadingSpec) int {
 	size += 1 + len(r.UniverseID)
 	size += 1 + len(r.Subject)
 	size += 1 + len(r.Aggregation)
-	size += 1 + len(r.Measurement.Quantity)
-	size += 1 + len(r.Measurement.Unit)
+	size += 1 + len(r.Value.Quantity)
+	size += 1 + len(r.Value.Unit)
 
 	// TIMESTAMPs
 	size += 8 // Window.Start
@@ -453,13 +461,15 @@ func TestStructSizes(t *testing.T) {
 	var event specs.EventPayloadSpec
 	var record specs.MeterRecordSpec
 	var reading specs.MeterReadingSpec
-	var measurement specs.MeasurementSpec
+	var observation specs.ObservationSpec
+	var aggregate specs.AggregateSpec
 	var window specs.TimeWindowSpec
 
 	t.Logf("EventPayloadSpec:  %d bytes", unsafe.Sizeof(event))
 	t.Logf("MeterRecordSpec:   %d bytes", unsafe.Sizeof(record))
 	t.Logf("MeterReadingSpec:  %d bytes", unsafe.Sizeof(reading))
-	t.Logf("MeasurementSpec:   %d bytes", unsafe.Sizeof(measurement))
+	t.Logf("ObservationSpec:   %d bytes", unsafe.Sizeof(observation))
+	t.Logf("AggregateSpec:     %d bytes", unsafe.Sizeof(aggregate))
 	t.Logf("TimeWindowSpec:    %d bytes", unsafe.Sizeof(window))
 	t.Logf("time.Time:         %d bytes", unsafe.Sizeof(time.Time{}))
 	t.Logf("string header:     %d bytes", unsafe.Sizeof(""))
