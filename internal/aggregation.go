@@ -8,6 +8,42 @@ import (
 	"time"
 )
 
+// unbundleObservations converts MeterRecordSpecs with bundled observations
+// into separate specs (one per observation) for aggregation processing.
+//
+// This enables backwards compatibility: aggregation can process both old
+// format (single Observation) and new format (multiple Observations array).
+func unbundleObservations(recordSpecs []specs.MeterRecordSpec) []specs.MeterRecordSpec {
+	result := make([]specs.MeterRecordSpec, 0, len(recordSpecs))
+
+	for _, spec := range recordSpecs {
+		// Try new field first (Observations array)
+		observations := spec.Observations
+		if len(observations) == 0 {
+			// Fall back to old field (singular Observation) for backwards compatibility
+			observations = []specs.ObservationSpec{spec.Observation}
+		}
+
+		// Create one spec per observation
+		for _, observation := range observations {
+			unbundledSpec := specs.MeterRecordSpec{
+				ID:            spec.ID,
+				WorkspaceID:   spec.WorkspaceID,
+				UniverseID:    spec.UniverseID,
+				Subject:       spec.Subject,
+				ObservedAt:    spec.ObservedAt,
+				Observation:   observation,  // Single observation for this unbundled spec
+				Dimensions:    spec.Dimensions,
+				SourceEventID: spec.SourceEventID,
+				MeteredAt:     spec.MeteredAt,
+			}
+			result = append(result, unbundledSpec)
+		}
+	}
+
+	return result
+}
+
 // Aggregate implements specs.Aggregate.
 // Converts specs to domain objects, transforms, and converts back to specs.
 func Aggregate(
@@ -15,9 +51,13 @@ func Aggregate(
 	lastBeforeWindowSpec *specs.MeterRecordSpec,
 	configSpec specs.AggregateConfigSpec,
 ) (specs.MeterReadingSpec, error) {
+	// Unbundle observations: convert each MeterRecordSpec with multiple observations
+	// into separate records (one per observation) for aggregation processing
+	unbundledSpecs := unbundleObservations(recordsInWindowSpec)
+
 	// Convert record specs to domain objects
-	recordsInWindow := make([]MeterRecord, len(recordsInWindowSpec))
-	for i, spec := range recordsInWindowSpec {
+	recordsInWindow := make([]MeterRecord, len(unbundledSpecs))
+	for i, spec := range unbundledSpecs {
 		record, err := NewMeterRecord(spec)
 		if err != nil {
 			return specs.MeterReadingSpec{}, fmt.Errorf("invalid record at index %d: %w", i, err)
@@ -25,14 +65,18 @@ func Aggregate(
 		recordsInWindow[i] = record
 	}
 
-	// Convert lastBefore spec if provided
+	// Convert lastBefore spec if provided (unbundle if needed)
 	var lastBeforeWindow *MeterRecord
 	if lastBeforeWindowSpec != nil {
-		record, err := NewMeterRecord(*lastBeforeWindowSpec)
-		if err != nil {
-			return specs.MeterReadingSpec{}, fmt.Errorf("invalid lastBeforeWindow: %w", err)
+		// Unbundle observations and use first one (for time-weighted-avg)
+		unbundledLast := unbundleObservations([]specs.MeterRecordSpec{*lastBeforeWindowSpec})
+		if len(unbundledLast) > 0 {
+			record, err := NewMeterRecord(unbundledLast[0])
+			if err != nil {
+				return specs.MeterReadingSpec{}, fmt.Errorf("invalid lastBeforeWindow: %w", err)
+			}
+			lastBeforeWindow = &record
 		}
-		lastBeforeWindow = &record
 	}
 
 	// Convert config spec to domain object
