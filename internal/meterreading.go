@@ -167,8 +167,8 @@ func NewTimeWindow(spec specs.TimeWindowSpec) (TimeWindow, error) {
 		return TimeWindow{}, fmt.Errorf("invalid end: %w", err)
 	}
 
-	if !spec.Start.Before(spec.End) {
-		return TimeWindow{}, fmt.Errorf("start must be before end")
+	if !spec.Start.Before(spec.End) && !spec.Start.Equal(spec.End) {
+		return TimeWindow{}, fmt.Errorf("start must be before or equal to end")
 	}
 
 	return TimeWindow{
@@ -177,12 +177,38 @@ func NewTimeWindow(spec specs.TimeWindowSpec) (TimeWindow, error) {
 	}, nil
 }
 
+// NewInstantWindow creates a TimeWindow for an instant observation (Start == End)
+func NewInstantWindow(instant time.Time) (TimeWindow, error) {
+	return NewTimeWindow(specs.TimeWindowSpec{
+		Start: instant,
+		End:   instant,
+	})
+}
+
+// TimeWindowFromSpec creates a TimeWindow from a spec (alias for NewTimeWindow)
+func TimeWindowFromSpec(spec specs.TimeWindowSpec) (TimeWindow, error) {
+	return NewTimeWindow(spec)
+}
+
 func (w TimeWindow) Start() TimeWindowStart {
 	return w.start
 }
 
 func (w TimeWindow) End() TimeWindowEnd {
 	return w.end
+}
+
+// IsInstant returns true if this window represents an instant (Start == End)
+func (w TimeWindow) IsInstant() bool {
+	return w.start.ToTime().Equal(w.end.ToTime())
+}
+
+// ToSpec converts TimeWindow to specs.TimeWindowSpec
+func (w TimeWindow) ToSpec() specs.TimeWindowSpec {
+	return specs.TimeWindowSpec{
+		Start: w.start.ToTime(),
+		End:   w.end.ToTime(),
+	}
 }
 
 type TimeWindowStart struct {

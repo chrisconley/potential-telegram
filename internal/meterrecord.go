@@ -248,6 +248,34 @@ func (u MeasurementUnit) ToString() string {
 	return u.value
 }
 
+// Observation represents a single observation from an event with temporal context.
+// Observations are raw measurements extracted from event payloads.
+type Observation struct {
+	quantity Decimal
+	unit     MeasurementUnit
+	window   TimeWindow
+}
+
+func NewObservation(quantity Decimal, unit MeasurementUnit, window TimeWindow) Observation {
+	return Observation{
+		quantity: quantity,
+		unit:     unit,
+		window:   window,
+	}
+}
+
+func (o Observation) Quantity() Decimal {
+	return o.quantity
+}
+
+func (o Observation) Unit() MeasurementUnit {
+	return o.unit
+}
+
+func (o Observation) Window() TimeWindow {
+	return o.window
+}
+
 type MeterRecordMeteredAt struct {
 	value time.Time
 }

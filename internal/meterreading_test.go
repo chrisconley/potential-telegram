@@ -177,18 +177,20 @@ func TestTimeWindow(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "start must be before end")
+		assert.Contains(t, err.Error(), "start must be before or equal to end")
 	})
 
-	t.Run("with equal start and end returns error", func(t *testing.T) {
+	t.Run("with equal start and end creates instant window", func(t *testing.T) {
 		same := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
-		_, err := NewTimeWindow(specs.TimeWindowSpec{
+		window, err := NewTimeWindow(specs.TimeWindowSpec{
 			Start: same,
 			End:   same,
 		})
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "start must be before end")
+		require.NoError(t, err)
+		assert.True(t, window.IsInstant(), "should be instant window when start == end")
+		assert.Equal(t, same, window.Start().ToTime())
+		assert.Equal(t, same, window.End().ToTime())
 	})
 }
