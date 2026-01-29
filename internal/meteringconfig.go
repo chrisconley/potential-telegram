@@ -6,120 +6,30 @@ import (
 )
 
 type MeteringConfig struct {
-	observations []ObservationExtraction  // New field
-	measurements []MeasurementExtraction  // Deprecated, kept for transition
+	observations []ObservationExtraction
 }
 
 func NewMeteringConfig(spec specs.MeteringConfigSpec) (MeteringConfig, error) {
-	// Prefer Observations (new naming), fall back to Measurements (old naming)
-	if len(spec.Observations) > 0 {
-		observations := make([]ObservationExtraction, 0, len(spec.Observations))
-		for i, o := range spec.Observations {
-			extraction, err := NewObservationExtraction(o)
-			if err != nil {
-				return MeteringConfig{}, fmt.Errorf("observation %d: %w", i, err)
-			}
-			observations = append(observations, extraction)
-		}
-
-		return MeteringConfig{
-			observations: observations,
-		}, nil
-	}
-
-	// Backwards compatibility: support old Measurements field
-	if len(spec.Measurements) == 0 {
+	if len(spec.Observations) == 0 {
 		return MeteringConfig{}, fmt.Errorf("at least one observation extraction is required")
 	}
 
-	measurements := make([]MeasurementExtraction, 0, len(spec.Measurements))
-	for i, m := range spec.Measurements {
-		extraction, err := NewMeasurementExtraction(m)
+	observations := make([]ObservationExtraction, 0, len(spec.Observations))
+	for i, o := range spec.Observations {
+		extraction, err := NewObservationExtraction(o)
 		if err != nil {
-			return MeteringConfig{}, fmt.Errorf("measurement %d: %w", i, err)
+			return MeteringConfig{}, fmt.Errorf("observation %d: %w", i, err)
 		}
-		measurements = append(measurements, extraction)
+		observations = append(observations, extraction)
 	}
 
 	return MeteringConfig{
-		measurements: measurements,
+		observations: observations,
 	}, nil
-}
-
-func (c MeteringConfig) Measurements() []MeasurementExtraction {
-	return c.measurements
 }
 
 func (c MeteringConfig) Observations() []ObservationExtraction {
 	return c.observations
-}
-
-type MeasurementExtraction struct {
-	sourceProperty MeasurementSourceProperty
-	unit           Unit
-	filter         *Filter
-}
-
-func NewMeasurementExtraction(spec specs.MeasurementExtractionSpec) (MeasurementExtraction, error) {
-	sourceProperty, err := NewMeasurementSourceProperty(spec.SourceProperty)
-	if err != nil {
-		return MeasurementExtraction{}, fmt.Errorf("invalid source property: %w", err)
-	}
-
-	unit, err := NewUnit(spec.Unit)
-	if err != nil {
-		return MeasurementExtraction{}, fmt.Errorf("invalid unit: %w", err)
-	}
-
-	var filter *Filter
-	if spec.Filter != nil {
-		f, err := NewFilter(*spec.Filter)
-		if err != nil {
-			return MeasurementExtraction{}, fmt.Errorf("invalid filter: %w", err)
-		}
-		filter = &f
-	}
-
-	return MeasurementExtraction{
-		sourceProperty: sourceProperty,
-		unit:           unit,
-		filter:         filter,
-	}, nil
-}
-
-func (m MeasurementExtraction) SourceProperty() MeasurementSourceProperty {
-	return m.sourceProperty
-}
-
-func (m MeasurementExtraction) Unit() Unit {
-	return m.unit
-}
-
-func (m MeasurementExtraction) Filter() *Filter {
-	return m.filter
-}
-
-// Matches returns true if the filter matches the payload properties (or if no filter exists).
-func (m MeasurementExtraction) Matches(properties EventPayloadProperties) bool {
-	if m.filter == nil {
-		return true
-	}
-	return m.filter.Matches(properties)
-}
-
-type MeasurementSourceProperty struct {
-	value string
-}
-
-func NewMeasurementSourceProperty(value string) (MeasurementSourceProperty, error) {
-	if value == "" {
-		return MeasurementSourceProperty{}, fmt.Errorf("source property is required")
-	}
-	return MeasurementSourceProperty{value: value}, nil
-}
-
-func (p MeasurementSourceProperty) ToString() string {
-	return p.value
 }
 
 type Filter struct {

@@ -26,9 +26,7 @@ func Meter(payloadSpec specs.EventPayloadSpec, configSpec specs.MeteringConfigSp
 	}
 
 	// Convert domain objects back to specs
-	// NOTE: During migration, we return one record per event with bundled observations
-	// For backwards compatibility, we still support the old format where meter()
-	// returns multiple records (one per measurement)
+	// Returns one record per event with bundled observations
 	if len(records) == 0 {
 		return []specs.MeterRecordSpec{}, nil
 	}
@@ -92,7 +90,7 @@ func convertDimensionsToMap(dimensions MeterRecordDimensions) map[string]string 
 // meter transforms an EventPayload into MeterRecords by applying the metering configuration.
 // This is the private domain-level function that operates on domain objects.
 //
-// For each measurement extraction in the config:
+// For each observation extraction in the config:
 //  1. Check if filter matches (if filter exists)
 //  2. Extract the source property value
 //  3. Cast to Decimal
@@ -103,15 +101,7 @@ func convertDimensionsToMap(dimensions MeterRecordDimensions) map[string]string 
 // Returns a slice of MeterRecords (one per matched extraction).
 // Returns empty slice if no extractions match (not an error).
 func meter(payload EventPayload, config MeteringConfig) ([]MeterRecord, error) {
-	// Use observations if populated (new path), otherwise measurements (old path)
-	if len(config.Observations()) > 0 {
-		return meterWithObservations(payload, config.Observations())
-	}
-	return meterWithMeasurements(payload, config.Measurements())
-}
-
-// meterWithObservations uses new ObservationExtraction types
-func meterWithObservations(payload EventPayload, observations []ObservationExtraction) ([]MeterRecord, error) {
+	observations := config.Observations()
 	// First pass: collect all source properties that will be extracted
 	extractedProperties := make(map[string]bool)
 	for _, extraction := range observations {
@@ -168,77 +158,6 @@ func meterWithObservations(payload EventPayload, observations []ObservationExtra
 			},
 			Dimensions:    dimensionsMap,
 			SourceEventID: payload.ID.ToString(),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create meter record: %w", err)
-		}
-
-		records = append(records, record)
-	}
-
-	return records, nil
-}
-
-// meterWithMeasurements uses old MeasurementExtraction types (backwards compatibility)
-func meterWithMeasurements(payload EventPayload, measurements []MeasurementExtraction) ([]MeterRecord, error) {
-	// First pass: collect all source properties that will be extracted
-	extractedProperties := make(map[string]bool)
-	for _, extraction := range measurements {
-		extractedProperties[extraction.SourceProperty().ToString()] = true
-	}
-
-	records := make([]MeterRecord, 0, len(measurements))
-
-	for _, extraction := range measurements {
-		// Check filter first
-		if !extraction.Matches(payload.Properties) {
-			continue // Skip this extraction
-		}
-
-		// Extract source property
-		sourceKey := extraction.SourceProperty().ToString()
-		sourceValue, exists := payload.Properties.Get(sourceKey)
-		if !exists {
-			return nil, fmt.Errorf("source property %q not found in payload", sourceKey)
-		}
-
-		// Cast to Decimal
-		quantity, err := NewDecimal(sourceValue)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse property %q value %q as decimal: %w", sourceKey, sourceValue, err)
-		}
-
-		// Build dimensions: all properties except those extracted as measurements
-		dimensionsMap := make(map[string]string)
-		for _, key := range payload.Properties.Keys() {
-			if !extractedProperties[key] {
-				if value, ok := payload.Properties.Get(key); ok {
-					dimensionsMap[key] = value
-				}
-			}
-		}
-
-		// Build MeterRecord
-		// TODO: ID generation strategy - for now just concatenate payload.ID + unit
-		recordID := payload.ID.ToString() + ":" + extraction.Unit().ToString()
-		observedAt := payload.Time.ToTime()
-
-		record, err := NewMeterRecord(specs.MeterRecordSpec{
-			ID:          recordID,
-			WorkspaceID: payload.WorkspaceID.ToString(),
-			UniverseID:  payload.UniverseID.ToString(),
-			Subject:     payload.Subject.ToString(),
-			ObservedAt:  observedAt,
-			Observations: []specs.ObservationSpec{
-				specs.NewInstantObservation(
-					quantity.String(),
-					extraction.Unit().ToString(),
-					observedAt,
-				),
-			},
-			Dimensions:    dimensionsMap,
-			SourceEventID: payload.ID.ToString(),
-			// MeteredAt will default to time.Now() in NewMeterRecord
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create meter record: %w", err)
