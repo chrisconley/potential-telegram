@@ -2,17 +2,22 @@ package specs
 
 // MeteringConfigSpec defines how to transform EventPayload properties into MeterRecords.
 //
-// One EventPayload can produce multiple MeterRecords (one per measurement extraction).
-// All properties not extracted as measurements are passed through as dimensions.
+// One EventPayload can produce multiple MeterRecords (one per observation extraction).
+// All properties not extracted as observations are passed through as dimensions.
 type MeteringConfigSpec struct {
-	// List of measurements to extract from the event payload.
+	// List of observations to extract from the event payload.
 	//
 	// Each extraction defines which property to extract, what unit to assign,
 	// and optionally a filter condition. A single event can produce multiple
 	// meter records if multiple extractions are configured. For example, an
 	// LLM completion event might extract both "input_tokens" and "output_tokens"
-	// as separate measurements with the "tokens" unit.
-	Measurements []MeasurementExtractionSpec `json:"measurements"`
+	// as separate observations with the "tokens" unit.
+	//
+	// Preferred over Measurements field (new naming).
+	Observations []ObservationExtractionSpec `json:"observations,omitempty"`
+
+	// Deprecated: Use Observations instead. Kept for backwards compatibility.
+	Measurements []MeasurementExtractionSpec `json:"measurements,omitempty"`
 }
 
 // MeasurementExtractionSpec defines how to extract a measurement from EventPayload.

@@ -6,12 +6,30 @@ import (
 )
 
 type MeteringConfig struct {
-	measurements []MeasurementExtraction
+	observations []ObservationExtraction  // New field
+	measurements []MeasurementExtraction  // Deprecated, kept for transition
 }
 
 func NewMeteringConfig(spec specs.MeteringConfigSpec) (MeteringConfig, error) {
+	// Prefer Observations (new naming), fall back to Measurements (old naming)
+	if len(spec.Observations) > 0 {
+		observations := make([]ObservationExtraction, 0, len(spec.Observations))
+		for i, o := range spec.Observations {
+			extraction, err := NewObservationExtraction(o)
+			if err != nil {
+				return MeteringConfig{}, fmt.Errorf("observation %d: %w", i, err)
+			}
+			observations = append(observations, extraction)
+		}
+
+		return MeteringConfig{
+			observations: observations,
+		}, nil
+	}
+
+	// Backwards compatibility: support old Measurements field
 	if len(spec.Measurements) == 0 {
-		return MeteringConfig{}, fmt.Errorf("at least one measurement extraction is required")
+		return MeteringConfig{}, fmt.Errorf("at least one observation extraction is required")
 	}
 
 	measurements := make([]MeasurementExtraction, 0, len(spec.Measurements))
@@ -30,6 +48,10 @@ func NewMeteringConfig(spec specs.MeteringConfigSpec) (MeteringConfig, error) {
 
 func (c MeteringConfig) Measurements() []MeasurementExtraction {
 	return c.measurements
+}
+
+func (c MeteringConfig) Observations() []ObservationExtraction {
+	return c.observations
 }
 
 type MeasurementExtraction struct {
