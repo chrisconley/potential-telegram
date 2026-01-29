@@ -127,21 +127,6 @@ func (s MeterRecordSubject) ToString() string {
 	return s.value
 }
 
-type MeterRecordRecordedAt struct {
-	value time.Time
-}
-
-func NewMeterRecordRecordedAt(value time.Time) (MeterRecordRecordedAt, error) {
-	if value.IsZero() {
-		return MeterRecordRecordedAt{}, fmt.Errorf("recorded at is required")
-	}
-	return MeterRecordRecordedAt{value: value}, nil
-}
-
-func (t MeterRecordRecordedAt) ToTime() time.Time {
-	return t.value
-}
-
 type MeterRecordObservedAt struct {
 	value time.Time
 }
