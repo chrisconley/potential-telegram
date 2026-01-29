@@ -234,27 +234,6 @@ func (u MeterRecordUniverseID) ToString() string {
 	return u.value
 }
 
-// Measurement combines a quantity with a unit
-type Measurement struct {
-	quantity Decimal
-	unit     Unit
-}
-
-func NewMeasurement(quantity Decimal, unit Unit) Measurement {
-	return Measurement{
-		quantity: quantity,
-		unit:     unit,
-	}
-}
-
-func (m Measurement) Quantity() Decimal {
-	return m.quantity
-}
-
-func (m Measurement) Unit() Unit {
-	return m.unit
-}
-
 type Unit struct {
 	value string
 }

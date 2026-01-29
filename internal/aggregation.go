@@ -172,17 +172,13 @@ func aggregate(
 		return MeterReading{}, fmt.Errorf("invalid subject: %w", err)
 	}
 
-	// Create Measurement for backwards compatibility
-	aggregatedMeasurement := NewMeasurement(aggregatedValue.Quantity(), aggregatedValue.Unit())
-
 	return MeterReading{
 		ID:           id,
 		WorkspaceID:  workspaceID,
 		UniverseID:   universeID,
 		Subject:      subject,
 		Window:       config.Window(),
-		Value:        aggregatedValue,       // NEW
-		Measurement:  aggregatedMeasurement, // OLD
+		Value:        aggregatedValue,
 		Aggregation:  config.Aggregation(),
 		RecordCount:  recordCountVO,
 		CreatedAt:    createdAt,
