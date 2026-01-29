@@ -484,6 +484,7 @@ reading := MeterReadingSpec{
 ## References
 
 ### Internal Documentation
+- `design/references/ubiquitous-language.md` - Comprehensive domain terminology definitions
 - `metering-spec/docs/time-spanning-events.md` - Temporal patterns for events
 - `metering-spec/docs/aggregation-types.md` - Counter vs gauge operations
 - `metering-spec/docs/observability-vs-metering.md` - Industry patterns and differences
