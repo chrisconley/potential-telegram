@@ -24,9 +24,12 @@ func TestNewMeterReading(t *testing.T) {
 				Start: windowStart,
 				End:   windowEnd,
 			},
-			Value: specs.AggregateSpec{
-				Quantity: "1250.50",
-				Unit:     "api-tokens",
+			ComputedValues: []specs.ComputedValueSpec{
+				{
+					Quantity:    "1250.50",
+					Unit:        "api-tokens",
+					Aggregation: "sum",
+				},
 			},
 			Aggregation:  "sum",
 			RecordCount:  5,
@@ -43,8 +46,11 @@ func TestNewMeterReading(t *testing.T) {
 		assert.Equal(t, "customer:acme", reading.Subject.ToString())
 		assert.Equal(t, windowStart, reading.Window.Start().ToTime())
 		assert.Equal(t, windowEnd, reading.Window.End().ToTime())
-		assert.Equal(t, "1250.50", reading.Measurement.Quantity().String())
-		assert.Equal(t, "api-tokens", reading.Measurement.Unit().ToString())
+		// Verify ComputedValues
+		require.Len(t, reading.ComputedValues, 1)
+		assert.Equal(t, "1250.50", reading.ComputedValues[0].Quantity().String())
+		assert.Equal(t, "api-tokens", reading.ComputedValues[0].Unit().ToString())
+		assert.Equal(t, "sum", reading.ComputedValues[0].Aggregation().ToString())
 		assert.Equal(t, "sum", reading.Aggregation.ToString())
 		assert.Equal(t, 5, reading.RecordCount.ToInt())
 		assert.Equal(t, now, reading.CreatedAt.ToTime())
@@ -61,9 +67,8 @@ func TestNewMeterReading(t *testing.T) {
 				Start: time.Time{}, // Zero value
 				End:   time.Now(),
 			},
-			Value: specs.AggregateSpec{
-				Quantity: "100",
-				Unit:     "tokens",
+			ComputedValues: []specs.ComputedValueSpec{
+				{Quantity: "100", Unit: "tokens", Aggregation: "sum"},
 			},
 			Aggregation: "sum",
 			RecordCount: 1,
@@ -85,9 +90,8 @@ func TestNewMeterReading(t *testing.T) {
 				Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 				End:   time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
 			},
-			Value: specs.AggregateSpec{
-				Quantity: "100",
-				Unit:     "tokens",
+			ComputedValues: []specs.ComputedValueSpec{
+				{Quantity: "100", Unit: "tokens", Aggregation: "invalid-agg"},
 			},
 			Aggregation: "invalid-agg",
 			RecordCount: 1,
@@ -109,9 +113,8 @@ func TestNewMeterReading(t *testing.T) {
 				Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 				End:   time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
 			},
-			Value: specs.AggregateSpec{
-				Quantity: "100",
-				Unit:     "tokens",
+			ComputedValues: []specs.ComputedValueSpec{
+				{Quantity: "100", Unit: "tokens", Aggregation: "sum"},
 			},
 			Aggregation: "sum",
 			RecordCount: -1,
@@ -121,6 +124,88 @@ func TestNewMeterReading(t *testing.T) {
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "record count cannot be negative")
+	})
+
+	t.Run("creates meter reading with ComputedValues array", func(t *testing.T) {
+		now := time.Now()
+		windowStart := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+		windowEnd := time.Date(2024, 1, 31, 23, 59, 59, 0, time.UTC)
+
+		spec := specs.MeterReadingSpec{
+			ID:          "reading-456",
+			WorkspaceID: "workspace-prod",
+			UniverseID:  "production",
+			Subject:     "customer:acme",
+			Window: specs.TimeWindowSpec{
+				Start: windowStart,
+				End:   windowEnd,
+			},
+			ComputedValues: []specs.ComputedValueSpec{
+				{
+					Quantity:    "1250",
+					Unit:        "input-tokens",
+					Aggregation: "sum",
+				},
+				{
+					Quantity:    "340",
+					Unit:        "output-tokens",
+					Aggregation: "sum",
+				},
+			},
+			Aggregation:  "sum",
+			RecordCount:  5,
+			CreatedAt:    now,
+			MaxMeteredAt: now,
+		}
+
+		reading, err := NewMeterReading(spec)
+
+		require.NoError(t, err)
+		assert.Equal(t, "reading-456", reading.ID.ToString())
+		require.Len(t, reading.ComputedValues, 2, "should have two computed values")
+
+		// Verify first computed value (input-tokens)
+		assert.Equal(t, "1250", reading.ComputedValues[0].Quantity().String())
+		assert.Equal(t, "input-tokens", reading.ComputedValues[0].Unit().ToString())
+		assert.Equal(t, "sum", reading.ComputedValues[0].Aggregation().ToString())
+
+		// Verify second computed value (output-tokens)
+		assert.Equal(t, "340", reading.ComputedValues[1].Quantity().String())
+		assert.Equal(t, "output-tokens", reading.ComputedValues[1].Unit().ToString())
+		assert.Equal(t, "sum", reading.ComputedValues[1].Aggregation().ToString())
+	})
+
+	t.Run("with single ComputedValue creates valid reading", func(t *testing.T) {
+		now := time.Now()
+		spec := specs.MeterReadingSpec{
+			ID:          "reading-789",
+			WorkspaceID: "workspace-prod",
+			UniverseID:  "production",
+			Subject:     "customer:acme",
+			Window: specs.TimeWindowSpec{
+				Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+				End:   time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
+			},
+			ComputedValues: []specs.ComputedValueSpec{
+				{
+					Quantity:    "1250",
+					Unit:        "tokens",
+					Aggregation: "sum",
+				},
+			},
+			Aggregation:  "sum",
+			RecordCount:  5,
+			CreatedAt:    now,
+			MaxMeteredAt: now,
+		}
+
+		reading, err := NewMeterReading(spec)
+
+		require.NoError(t, err)
+		require.Len(t, reading.ComputedValues, 1)
+		assert.Equal(t, "1250", reading.ComputedValues[0].Quantity().String())
+		assert.Equal(t, "tokens", reading.ComputedValues[0].Unit().ToString())
+		assert.Equal(t, "sum", reading.ComputedValues[0].Aggregation().ToString())
 	})
 }
 
@@ -177,18 +262,84 @@ func TestTimeWindow(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "start must be before end")
+		assert.Contains(t, err.Error(), "start must be before or equal to end")
 	})
 
-	t.Run("with equal start and end returns error", func(t *testing.T) {
+	t.Run("with equal start and end creates instant window", func(t *testing.T) {
 		same := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
-		_, err := NewTimeWindow(specs.TimeWindowSpec{
+		window, err := NewTimeWindow(specs.TimeWindowSpec{
 			Start: same,
 			End:   same,
 		})
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "start must be before end")
+		require.NoError(t, err)
+		assert.True(t, window.IsInstant(), "should be instant window when start == end")
+		assert.Equal(t, same, window.Start().ToTime())
+		assert.Equal(t, same, window.End().ToTime())
+	})
+}
+
+func TestNewComputedValue(t *testing.T) {
+	t.Run("creates computed value with all fields", func(t *testing.T) {
+		quantity, err := NewDecimal("1250.50")
+		require.NoError(t, err)
+
+		unit, err := NewUnit("api-tokens")
+		require.NoError(t, err)
+
+		aggregation, err := NewMeterReadingAggregation("sum")
+		require.NoError(t, err)
+
+		computed := NewComputedValue(quantity, unit, aggregation)
+
+		assert.Equal(t, "1250.50", computed.Quantity().String())
+		assert.Equal(t, "api-tokens", computed.Unit().ToString())
+		assert.Equal(t, "sum", computed.Aggregation().ToString())
+	})
+
+	t.Run("creates computed value with different aggregation types", func(t *testing.T) {
+		quantity, _ := NewDecimal("100")
+		unit, _ := NewUnit("seats")
+
+		aggregations := []string{"sum", "max", "min", "latest", "time-weighted-avg"}
+
+		for _, aggType := range aggregations {
+			agg, err := NewMeterReadingAggregation(aggType)
+			require.NoError(t, err)
+
+			computed := NewComputedValue(quantity, unit, agg)
+
+			assert.Equal(t, aggType, computed.Aggregation().ToString(),
+				"should preserve aggregation type: %s", aggType)
+		}
+	})
+}
+
+func TestComputedValue_ToSpec(t *testing.T) {
+	t.Run("converts to spec correctly", func(t *testing.T) {
+		quantity, _ := NewDecimal("1250.50")
+		unit, _ := NewUnit("api-tokens")
+		aggregation, _ := NewMeterReadingAggregation("sum")
+
+		computed := NewComputedValue(quantity, unit, aggregation)
+		spec := computed.ToSpec()
+
+		assert.Equal(t, "1250.50", spec.Quantity)
+		assert.Equal(t, "api-tokens", spec.Unit)
+		assert.Equal(t, "sum", spec.Aggregation)
+	})
+
+	t.Run("converts time-weighted-avg correctly", func(t *testing.T) {
+		quantity, _ := NewDecimal("42.75")
+		unit, _ := NewUnit("seats")
+		aggregation, _ := NewMeterReadingAggregation("time-weighted-avg")
+
+		computed := NewComputedValue(quantity, unit, aggregation)
+		spec := computed.ToSpec()
+
+		assert.Equal(t, "42.75", spec.Quantity)
+		assert.Equal(t, "seats", spec.Unit)
+		assert.Equal(t, "time-weighted-avg", spec.Aggregation)
 	})
 }

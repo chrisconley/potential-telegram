@@ -11,8 +11,8 @@ type MeterRecord struct {
 	WorkspaceID   MeterRecordWorkspaceID
 	UniverseID    MeterRecordUniverseID
 	Subject       MeterRecordSubject
-	RecordedAt    MeterRecordRecordedAt
-	Measurement   Measurement
+	ObservedAt    MeterRecordObservedAt
+	Observations  []Observation
 	Dimensions    MeterRecordDimensions
 	SourceEventID MeterRecordSourceEventID
 	MeteredAt     MeterRecordMeteredAt
@@ -39,19 +39,32 @@ func NewMeterRecord(spec specs.MeterRecordSpec) (MeterRecord, error) {
 		return MeterRecord{}, fmt.Errorf("invalid subject: %w", err)
 	}
 
-	quantity, err := NewDecimal(spec.Observation.Quantity)
-	if err != nil {
-		return MeterRecord{}, fmt.Errorf("invalid quantity: %w", err)
+	// Build observations from spec.Observations array
+	if len(spec.Observations) == 0 {
+		return MeterRecord{}, fmt.Errorf("observations array is empty")
 	}
 
-	unit, err := NewMeasurementUnit(spec.Observation.Unit)
-	if err != nil {
-		return MeterRecord{}, fmt.Errorf("invalid unit: %w", err)
+	observations := make([]Observation, len(spec.Observations))
+	for i, obsSpec := range spec.Observations {
+		quantity, err := NewDecimal(obsSpec.Quantity)
+		if err != nil {
+			return MeterRecord{}, fmt.Errorf("invalid observation[%d] quantity: %w", i, err)
+		}
+
+		unit, err := NewUnit(obsSpec.Unit)
+		if err != nil {
+			return MeterRecord{}, fmt.Errorf("invalid observation[%d] unit: %w", i, err)
+		}
+
+		window, err := TimeWindowFromSpec(obsSpec.Window)
+		if err != nil {
+			return MeterRecord{}, fmt.Errorf("invalid observation[%d] window: %w", i, err)
+		}
+
+		observations[i] = NewObservation(quantity, unit, window)
 	}
 
-	measurement := NewMeasurement(quantity, unit)
-
-	recordedAt, err := NewMeterRecordRecordedAt(spec.ObservedAt)
+	observedAt, err := NewMeterRecordObservedAt(spec.ObservedAt)
 	if err != nil {
 		return MeterRecord{}, fmt.Errorf("invalid observed at: %w", err)
 	}
@@ -76,8 +89,8 @@ func NewMeterRecord(spec specs.MeterRecordSpec) (MeterRecord, error) {
 		WorkspaceID:   workspaceID,
 		UniverseID:    universeID,
 		Subject:       subject,
-		RecordedAt:    recordedAt,
-		Measurement:   measurement,
+		ObservedAt:    observedAt,
+		Observations:  observations,
 		Dimensions:    dimensions,
 		SourceEventID: sourceEventID,
 		MeteredAt:     meteredAt,
@@ -114,18 +127,18 @@ func (s MeterRecordSubject) ToString() string {
 	return s.value
 }
 
-type MeterRecordRecordedAt struct {
+type MeterRecordObservedAt struct {
 	value time.Time
 }
 
-func NewMeterRecordRecordedAt(value time.Time) (MeterRecordRecordedAt, error) {
+func NewMeterRecordObservedAt(value time.Time) (MeterRecordObservedAt, error) {
 	if value.IsZero() {
-		return MeterRecordRecordedAt{}, fmt.Errorf("recorded at is required")
+		return MeterRecordObservedAt{}, fmt.Errorf("observed at is required")
 	}
-	return MeterRecordRecordedAt{value: value}, nil
+	return MeterRecordObservedAt{value: value}, nil
 }
 
-func (t MeterRecordRecordedAt) ToTime() time.Time {
+func (t MeterRecordObservedAt) ToTime() time.Time {
 	return t.value
 }
 
@@ -206,40 +219,47 @@ func (u MeterRecordUniverseID) ToString() string {
 	return u.value
 }
 
-// Measurement combines a quantity with a unit
-type Measurement struct {
-	quantity Decimal
-	unit     MeasurementUnit
-}
-
-func NewMeasurement(quantity Decimal, unit MeasurementUnit) Measurement {
-	return Measurement{
-		quantity: quantity,
-		unit:     unit,
-	}
-}
-
-func (m Measurement) Quantity() Decimal {
-	return m.quantity
-}
-
-func (m Measurement) Unit() MeasurementUnit {
-	return m.unit
-}
-
-type MeasurementUnit struct {
+type Unit struct {
 	value string
 }
 
-func NewMeasurementUnit(value string) (MeasurementUnit, error) {
+func NewUnit(value string) (Unit, error) {
 	if value == "" {
-		return MeasurementUnit{}, fmt.Errorf("unit is required")
+		return Unit{}, fmt.Errorf("unit is required")
 	}
-	return MeasurementUnit{value: value}, nil
+	return Unit{value: value}, nil
 }
 
-func (u MeasurementUnit) ToString() string {
+func (u Unit) ToString() string {
 	return u.value
+}
+
+// Observation represents a single observation from an event with temporal context.
+// Observations are raw measurements extracted from event payloads.
+type Observation struct {
+	quantity Decimal
+	unit     Unit
+	window   TimeWindow
+}
+
+func NewObservation(quantity Decimal, unit Unit, window TimeWindow) Observation {
+	return Observation{
+		quantity: quantity,
+		unit:     unit,
+		window:   window,
+	}
+}
+
+func (o Observation) Quantity() Decimal {
+	return o.quantity
+}
+
+func (o Observation) Unit() Unit {
+	return o.unit
+}
+
+func (o Observation) Window() TimeWindow {
+	return o.window
 }
 
 type MeterRecordMeteredAt struct {

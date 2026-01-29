@@ -7,16 +7,16 @@ import (
 )
 
 type MeterReading struct {
-	ID               MeterReadingID
-	WorkspaceID      MeterReadingWorkspaceID
-	UniverseID       MeterReadingUniverseID
-	Subject          MeterReadingSubject
-	Window           TimeWindow
-	Measurement      Measurement
-	Aggregation      MeterReadingAggregation
-	RecordCount      MeterReadingRecordCount
-	CreatedAt        MeterReadingCreatedAt
-	MaxMeteredAt     MeterReadingMaxMeteredAt
+	ID             MeterReadingID
+	WorkspaceID    MeterReadingWorkspaceID
+	UniverseID     MeterReadingUniverseID
+	Subject        MeterReadingSubject
+	Window         TimeWindow
+	ComputedValues []ComputedValue
+	Aggregation    MeterReadingAggregation
+	RecordCount    MeterReadingRecordCount
+	CreatedAt      MeterReadingCreatedAt
+	MaxMeteredAt   MeterReadingMaxMeteredAt
 }
 
 func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
@@ -45,17 +45,30 @@ func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
 		return MeterReading{}, fmt.Errorf("invalid window: %w", err)
 	}
 
-	quantity, err := NewDecimal(spec.Value.Quantity)
-	if err != nil {
-		return MeterReading{}, fmt.Errorf("invalid quantity: %w", err)
+	// Convert ComputedValues from spec to domain objects
+	if len(spec.ComputedValues) == 0 {
+		return MeterReading{}, fmt.Errorf("at least one computed value is required")
 	}
 
-	unit, err := NewMeasurementUnit(spec.Value.Unit)
-	if err != nil {
-		return MeterReading{}, fmt.Errorf("invalid unit: %w", err)
-	}
+	computedValues := make([]ComputedValue, len(spec.ComputedValues))
+	for i, cv := range spec.ComputedValues {
+		quantity, err := NewDecimal(cv.Quantity)
+		if err != nil {
+			return MeterReading{}, fmt.Errorf("invalid computed value %d quantity: %w", i, err)
+		}
 
-	measurement := NewMeasurement(quantity, unit)
+		unit, err := NewUnit(cv.Unit)
+		if err != nil {
+			return MeterReading{}, fmt.Errorf("invalid computed value %d unit: %w", i, err)
+		}
+
+		aggregation, err := NewMeterReadingAggregation(cv.Aggregation)
+		if err != nil {
+			return MeterReading{}, fmt.Errorf("invalid computed value %d aggregation: %w", i, err)
+		}
+
+		computedValues[i] = NewComputedValue(quantity, unit, aggregation)
+	}
 
 	aggregation, err := NewMeterReadingAggregation(spec.Aggregation)
 	if err != nil {
@@ -78,16 +91,16 @@ func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
 	}
 
 	return MeterReading{
-		ID:           id,
-		WorkspaceID:  workspaceID,
-		UniverseID:   universeID,
-		Subject:      subject,
-		Window:       window,
-		Measurement:  measurement,
-		Aggregation:  aggregation,
-		RecordCount:  recordCount,
-		CreatedAt:    createdAt,
-		MaxMeteredAt: maxMeteredAt,
+		ID:             id,
+		WorkspaceID:    workspaceID,
+		UniverseID:     universeID,
+		Subject:        subject,
+		Window:         window,
+		ComputedValues: computedValues,
+		Aggregation:    aggregation,
+		RecordCount:    recordCount,
+		CreatedAt:      createdAt,
+		MaxMeteredAt:   maxMeteredAt,
 	}, nil
 }
 
@@ -167,8 +180,8 @@ func NewTimeWindow(spec specs.TimeWindowSpec) (TimeWindow, error) {
 		return TimeWindow{}, fmt.Errorf("invalid end: %w", err)
 	}
 
-	if !spec.Start.Before(spec.End) {
-		return TimeWindow{}, fmt.Errorf("start must be before end")
+	if !spec.Start.Before(spec.End) && !spec.Start.Equal(spec.End) {
+		return TimeWindow{}, fmt.Errorf("start must be before or equal to end")
 	}
 
 	return TimeWindow{
@@ -177,12 +190,38 @@ func NewTimeWindow(spec specs.TimeWindowSpec) (TimeWindow, error) {
 	}, nil
 }
 
+// NewInstantWindow creates a TimeWindow for an instant observation (Start == End)
+func NewInstantWindow(instant time.Time) (TimeWindow, error) {
+	return NewTimeWindow(specs.TimeWindowSpec{
+		Start: instant,
+		End:   instant,
+	})
+}
+
+// TimeWindowFromSpec creates a TimeWindow from a spec (alias for NewTimeWindow)
+func TimeWindowFromSpec(spec specs.TimeWindowSpec) (TimeWindow, error) {
+	return NewTimeWindow(spec)
+}
+
 func (w TimeWindow) Start() TimeWindowStart {
 	return w.start
 }
 
 func (w TimeWindow) End() TimeWindowEnd {
 	return w.end
+}
+
+// IsInstant returns true if this window represents an instant (Start == End)
+func (w TimeWindow) IsInstant() bool {
+	return w.start.ToTime().Equal(w.end.ToTime())
+}
+
+// ToSpec converts TimeWindow to specs.TimeWindowSpec
+func (w TimeWindow) ToSpec() specs.TimeWindowSpec {
+	return specs.TimeWindowSpec{
+		Start: w.start.ToTime(),
+		End:   w.end.ToTime(),
+	}
 }
 
 type TimeWindowStart struct {
@@ -213,6 +252,49 @@ func NewTimeWindowEnd(value time.Time) (TimeWindowEnd, error) {
 
 func (t TimeWindowEnd) ToTime() time.Time {
 	return t.value
+}
+
+// ComputedValue represents a computed value from observations.
+//
+// This is the new naming aligned with domain terminology. Unlike AggregateValue,
+// ComputedValue includes the aggregation type, making the computation strategy explicit.
+//
+// The term "computed" is more general than "aggregate"—values may be computed through
+// aggregation, transformation, or other means. This flexibility accommodates future
+// non-aggregation computations while maintaining semantic clarity.
+type ComputedValue struct {
+	quantity    Decimal
+	unit        Unit
+	aggregation MeterReadingAggregation
+}
+
+func NewComputedValue(quantity Decimal, unit Unit, aggregation MeterReadingAggregation) ComputedValue {
+	return ComputedValue{
+		quantity:    quantity,
+		unit:        unit,
+		aggregation: aggregation,
+	}
+}
+
+func (c ComputedValue) Quantity() Decimal {
+	return c.quantity
+}
+
+func (c ComputedValue) Unit() Unit {
+	return c.unit
+}
+
+func (c ComputedValue) Aggregation() MeterReadingAggregation {
+	return c.aggregation
+}
+
+// ToSpec converts ComputedValue to specs.ComputedValueSpec
+func (c ComputedValue) ToSpec() specs.ComputedValueSpec {
+	return specs.ComputedValueSpec{
+		Quantity:    c.quantity.String(),
+		Unit:        c.unit.ToString(),
+		Aggregation: c.aggregation.ToString(),
+	}
 }
 
 type MeterReadingAggregation struct {
@@ -264,39 +346,41 @@ func (a MeterReadingAggregation) IsMin() bool {
 //   - sum/max/min/latest: use recordsInWindow only
 //   - time-weighted-avg: uses all parameters
 //
-// Returns the aggregated measurement, record count, and any error.
+// Returns the aggregated quantity, unit, record count, and any error.
 func (a MeterReadingAggregation) Aggregate(
 	recordsInWindow []MeterRecord,
 	lastBeforeWindow *MeterRecord,
 	window TimeWindow,
-) (Measurement, int, error) {
+) (Decimal, Unit, int, error) {
 	switch a.value {
 	case "sum":
-		measurement, err := sumRecords(recordsInWindow)
-		return measurement, len(recordsInWindow), err
+		quantity, unit, err := sumRecords(recordsInWindow)
+		return quantity, unit, len(recordsInWindow), err
 
 	case "max":
-		measurement, err := maxRecords(recordsInWindow)
-		return measurement, len(recordsInWindow), err
+		quantity, unit, err := maxRecords(recordsInWindow)
+		return quantity, unit, len(recordsInWindow), err
 
 	case "min":
-		measurement, err := minRecords(recordsInWindow)
-		return measurement, len(recordsInWindow), err
+		quantity, unit, err := minRecords(recordsInWindow)
+		return quantity, unit, len(recordsInWindow), err
 
 	case "latest":
-		measurement, err := latestRecord(recordsInWindow)
-		return measurement, len(recordsInWindow), err
+		quantity, unit, err := latestRecord(recordsInWindow)
+		return quantity, unit, len(recordsInWindow), err
 
 	case "time-weighted-avg":
-		measurement, err := timeWeightedAvgRecords(recordsInWindow, lastBeforeWindow, window)
+		quantity, unit, err := timeWeightedAvgRecords(recordsInWindow, lastBeforeWindow, window)
 		recordCount := len(recordsInWindow)
 		if lastBeforeWindow != nil {
 			recordCount++ // Count the carry-forward record
 		}
-		return measurement, recordCount, err
+		return quantity, unit, recordCount, err
 
 	default:
-		return Measurement{}, 0, fmt.Errorf("unsupported aggregation type: %s", a.value)
+		var zeroDecimal Decimal
+		var zeroUnit Unit
+		return zeroDecimal, zeroUnit, 0, fmt.Errorf("unsupported aggregation type: %s", a.value)
 	}
 }
 
@@ -345,72 +429,89 @@ func (m MeterReadingMaxMeteredAt) ToTime() time.Time {
 	return m.value
 }
 
-// sumRecords returns the sum of all record measurements.
-// Returns error if records is empty or measurements are incompatible.
-func sumRecords(records []MeterRecord) (Measurement, error) {
+// sumRecords returns the sum of all record observations.
+// Returns error if records is empty or observations are incompatible.
+func sumRecords(records []MeterRecord) (Decimal, Unit, error) {
+	var zeroDecimal Decimal
+	var zeroUnit Unit
+
 	if len(records) == 0 {
-		return Measurement{}, fmt.Errorf("cannot sum empty records")
+		return zeroDecimal, zeroUnit, fmt.Errorf("cannot sum empty records")
 	}
 
-	sum := records[0].Measurement.Quantity()
-	unit := records[0].Measurement.Unit()
+	// Use first observation from first record
+	sum := records[0].Observations[0].Quantity()
+	unit := records[0].Observations[0].Unit()
 
 	for _, r := range records[1:] {
-		sum = sum.Add(r.Measurement.Quantity())
+		sum = sum.Add(r.Observations[0].Quantity())
 	}
 
-	return NewMeasurement(sum, unit), nil
+	return sum, unit, nil
 }
 
-// maxRecords returns the maximum measurement from all records.
+// maxRecords returns the maximum observation from all records.
 // Returns error if records is empty.
-func maxRecords(records []MeterRecord) (Measurement, error) {
+func maxRecords(records []MeterRecord) (Decimal, Unit, error) {
+	var zeroDecimal Decimal
+	var zeroUnit Unit
+
 	if len(records) == 0 {
-		return Measurement{}, fmt.Errorf("cannot find max of empty records")
+		return zeroDecimal, zeroUnit, fmt.Errorf("cannot find max of empty records")
 	}
 
-	max := records[0].Measurement
+	maxQuantity := records[0].Observations[0].Quantity()
+	unit := records[0].Observations[0].Unit()
+
 	for _, r := range records[1:] {
-		if r.Measurement.Quantity().Cmp(max.Quantity()) > 0 {
-			max = r.Measurement
+		if r.Observations[0].Quantity().Cmp(maxQuantity) > 0 {
+			maxQuantity = r.Observations[0].Quantity()
 		}
 	}
 
-	return max, nil
+	return maxQuantity, unit, nil
 }
 
-// minRecords returns the minimum measurement from all records.
+// minRecords returns the minimum observation from all records.
 // Returns error if records is empty.
-func minRecords(records []MeterRecord) (Measurement, error) {
+func minRecords(records []MeterRecord) (Decimal, Unit, error) {
+	var zeroDecimal Decimal
+	var zeroUnit Unit
+
 	if len(records) == 0 {
-		return Measurement{}, fmt.Errorf("cannot find min of empty records")
+		return zeroDecimal, zeroUnit, fmt.Errorf("cannot find min of empty records")
 	}
 
-	min := records[0].Measurement
+	minQuantity := records[0].Observations[0].Quantity()
+	unit := records[0].Observations[0].Unit()
+
 	for _, r := range records[1:] {
-		if r.Measurement.Quantity().Cmp(min.Quantity()) < 0 {
-			min = r.Measurement
+		if r.Observations[0].Quantity().Cmp(minQuantity) < 0 {
+			minQuantity = r.Observations[0].Quantity()
 		}
 	}
 
-	return min, nil
+	return minQuantity, unit, nil
 }
 
-// latestRecord returns the measurement from the most recent record by RecordedAt timestamp.
+// latestRecord returns the observation from the most recent record by ObservedAt timestamp.
 // Returns error if records is empty.
-func latestRecord(records []MeterRecord) (Measurement, error) {
+func latestRecord(records []MeterRecord) (Decimal, Unit, error) {
+	var zeroDecimal Decimal
+	var zeroUnit Unit
+
 	if len(records) == 0 {
-		return Measurement{}, fmt.Errorf("cannot find latest of empty records")
+		return zeroDecimal, zeroUnit, fmt.Errorf("cannot find latest of empty records")
 	}
 
 	latest := records[0]
 	for _, r := range records[1:] {
-		if r.RecordedAt.ToTime().After(latest.RecordedAt.ToTime()) {
+		if r.ObservedAt.ToTime().After(latest.ObservedAt.ToTime()) {
 			latest = r
 		}
 	}
 
-	return latest.Measurement, nil
+	return latest.Observations[0].Quantity(), latest.Observations[0].Unit(), nil
 }
 
 // timeWeightedAvgRecords computes the time-weighted average of gauge readings.
@@ -430,7 +531,10 @@ func timeWeightedAvgRecords(
 	recordsInWindow []MeterRecord,
 	lastBeforeWindow *MeterRecord,
 	window TimeWindow,
-) (Measurement, error) {
+) (Decimal, Unit, error) {
+	var zeroDecimal Decimal
+	var zeroUnit Unit
+
 	// Combine records (last-before + in-window)
 	var allRecords []MeterRecord
 	if lastBeforeWindow != nil {
@@ -439,22 +543,22 @@ func timeWeightedAvgRecords(
 	allRecords = append(allRecords, recordsInWindow...)
 
 	if len(allRecords) == 0 {
-		return Measurement{}, fmt.Errorf("cannot compute time-weighted average: no records")
+		return zeroDecimal, zeroUnit, fmt.Errorf("cannot compute time-weighted average: no records")
 	}
 
-	// Sort by RecordedAt timestamp
+	// Sort by ObservedAt timestamp
 	sortedRecords := make([]MeterRecord, len(allRecords))
 	copy(sortedRecords, allRecords)
 	for i := 0; i < len(sortedRecords); i++ {
 		for j := i + 1; j < len(sortedRecords); j++ {
-			if sortedRecords[j].RecordedAt.ToTime().Before(sortedRecords[i].RecordedAt.ToTime()) {
+			if sortedRecords[j].ObservedAt.ToTime().Before(sortedRecords[i].ObservedAt.ToTime()) {
 				sortedRecords[i], sortedRecords[j] = sortedRecords[j], sortedRecords[i]
 			}
 		}
 	}
 
 	// Compute weighted sum: Σ(value × duration)
-	unit := sortedRecords[0].Measurement.Unit()
+	unit := sortedRecords[0].Observations[0].Unit()
 	weightedSum, _ := NewDecimal("0")
 
 	windowStart := window.Start().ToTime()
@@ -462,14 +566,14 @@ func timeWeightedAvgRecords(
 
 	for i, record := range sortedRecords {
 		// Determine when this value is valid (from this timestamp until next, or window end)
-		validFrom := record.RecordedAt.ToTime()
+		validFrom := record.ObservedAt.ToTime()
 		if validFrom.Before(windowStart) {
 			validFrom = windowStart // Clamp to window start
 		}
 
 		validUntil := windowEnd
 		if i+1 < len(sortedRecords) {
-			nextTimestamp := sortedRecords[i+1].RecordedAt.ToTime()
+			nextTimestamp := sortedRecords[i+1].ObservedAt.ToTime()
 			if nextTimestamp.Before(windowEnd) {
 				validUntil = nextTimestamp
 			}
@@ -480,7 +584,7 @@ func timeWeightedAvgRecords(
 			durationSeconds := validUntil.Sub(validFrom).Seconds()
 			duration, _ := NewDecimal(fmt.Sprintf("%.15f", durationSeconds))
 
-			contribution := record.Measurement.Quantity().Mul(duration)
+			contribution := record.Observations[0].Quantity().Mul(duration)
 			weightedSum = weightedSum.Add(contribution)
 		}
 	}
@@ -491,5 +595,5 @@ func timeWeightedAvgRecords(
 
 	avg := weightedSum.Div(totalDuration)
 
-	return NewMeasurement(avg, unit), nil
+	return avg, unit, nil
 }

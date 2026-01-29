@@ -19,7 +19,9 @@ func BenchmarkMeterReading_Minimal_Memory(b *testing.B) {
 			UniverseID:   "",
 			Subject:      "",
 			Window:       specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}},
-			Measurement:  specs.MeasurementSpec{Quantity: "", Unit: ""},
+			ComputedValues: []specs.ComputedValueSpec{
+				{Quantity: "", Unit: "", Aggregation: "sum"},
+			},
 			Aggregation:  "",
 			RecordCount:  0,
 			CreatedAt:    time.Time{},
@@ -42,9 +44,8 @@ func BenchmarkMeterReading_Realistic_Memory(b *testing.B) {
 				Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 				End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 			},
-			Measurement: specs.MeasurementSpec{
-				Quantity: "12500",
-				Unit:     "tokens",
+			ComputedValues: []specs.ComputedValueSpec{
+				{Quantity: "12500", Unit: "tokens", Aggregation: "sum"},
 			},
 			Aggregation:  "sum",
 			RecordCount:  1250,
@@ -68,9 +69,8 @@ func BenchmarkMeterReading_TimeWeightedAvg_Memory(b *testing.B) {
 				Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 				End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 			},
-			Measurement: specs.MeasurementSpec{
-				Quantity: "12.32",
-				Unit:     "seats",
+			ComputedValues: []specs.ComputedValueSpec{
+				{Quantity: "12.32", Unit: "seats", Aggregation: "time-weighted-avg"},
 			},
 			Aggregation:  "time-weighted-avg",
 			RecordCount:  156,
@@ -91,9 +91,8 @@ func BenchmarkMeterReading_Realistic_JSONMarshal(b *testing.B) {
 			Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 			End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 		},
-		Measurement: specs.MeasurementSpec{
-			Quantity: "12500",
-			Unit:     "tokens",
+		ComputedValues: []specs.ComputedValueSpec{
+			{Quantity: "12500", Unit: "tokens", Aggregation: "sum"},
 		},
 		Aggregation:  "sum",
 		RecordCount:  1250,
@@ -123,7 +122,7 @@ func BenchmarkMeterReading_Realistic_JSONUnmarshal(b *testing.B) {
 			"start": "2024-02-01T00:00:00Z",
 			"end": "2024-03-01T00:00:00Z"
 		},
-		"measurement": {
+		"value": {
 			"quantity": "12500",
 			"unit": "tokens"
 		},
@@ -156,9 +155,8 @@ func BenchmarkMeterReading_Realistic_JSONRoundtrip(b *testing.B) {
 			Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 			End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 		},
-		Measurement: specs.MeasurementSpec{
-			Quantity: "12500",
-			Unit:     "tokens",
+		ComputedValues: []specs.ComputedValueSpec{
+			{Quantity: "12500", Unit: "tokens", Aggregation: "sum"},
 		},
 		Aggregation:  "sum",
 		RecordCount:  1250,
@@ -197,7 +195,9 @@ func BenchmarkMeterReading_JSONSize(b *testing.B) {
 				UniverseID:   "",
 				Subject:      "",
 				Window:       specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}},
-				Measurement:  specs.MeasurementSpec{Quantity: "", Unit: ""},
+				ComputedValues: []specs.ComputedValueSpec{
+					{Quantity: "", Unit: "", Aggregation: "sum"},
+				},
 				Aggregation:  "",
 				RecordCount:  0,
 				CreatedAt:    time.Time{},
@@ -215,9 +215,8 @@ func BenchmarkMeterReading_JSONSize(b *testing.B) {
 					Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 					End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 				},
-				Measurement: specs.MeasurementSpec{
-					Quantity: "12500",
-					Unit:     "tokens",
+				ComputedValues: []specs.ComputedValueSpec{
+					{Quantity: "12500", Unit: "tokens", Aggregation: "sum"},
 				},
 				Aggregation:  "sum",
 				RecordCount:  1250,
@@ -236,9 +235,8 @@ func BenchmarkMeterReading_JSONSize(b *testing.B) {
 					Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 					End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 				},
-				Measurement: specs.MeasurementSpec{
-					Quantity: "12.32",
-					Unit:     "seats",
+				ComputedValues: []specs.ComputedValueSpec{
+					{Quantity: "12.32", Unit: "seats", Aggregation: "time-weighted-avg"},
 				},
 				Aggregation:  "time-weighted-avg",
 				RecordCount:  156,

@@ -8,6 +8,41 @@ import (
 	"time"
 )
 
+// unbundleObservations converts MeterRecordSpecs with bundled observations
+// into separate specs (one per observation) for aggregation processing.
+//
+// This enables backwards compatibility: aggregation can process both old
+// format (single Observation) and new format (multiple Observations array).
+func unbundleObservations(recordSpecs []specs.MeterRecordSpec) []specs.MeterRecordSpec {
+	result := make([]specs.MeterRecordSpec, 0, len(recordSpecs))
+
+	for _, spec := range recordSpecs {
+		// Each spec should have observations array populated
+		observations := spec.Observations
+		if len(observations) == 0 {
+			continue // Skip records with no observations
+		}
+
+		// Create one spec per observation
+		for _, observation := range observations {
+			unbundledSpec := specs.MeterRecordSpec{
+				ID:            spec.ID,
+				WorkspaceID:   spec.WorkspaceID,
+				UniverseID:    spec.UniverseID,
+				Subject:       spec.Subject,
+				ObservedAt:    spec.ObservedAt,
+				Observations:  []specs.ObservationSpec{observation}, // Single observation in array
+				Dimensions:    spec.Dimensions,
+				SourceEventID: spec.SourceEventID,
+				MeteredAt:     spec.MeteredAt,
+			}
+			result = append(result, unbundledSpec)
+		}
+	}
+
+	return result
+}
+
 // Aggregate implements specs.Aggregate.
 // Converts specs to domain objects, transforms, and converts back to specs.
 func Aggregate(
@@ -15,9 +50,13 @@ func Aggregate(
 	lastBeforeWindowSpec *specs.MeterRecordSpec,
 	configSpec specs.AggregateConfigSpec,
 ) (specs.MeterReadingSpec, error) {
+	// Unbundle observations: convert each MeterRecordSpec with multiple observations
+	// into separate records (one per observation) for aggregation processing
+	unbundledSpecs := unbundleObservations(recordsInWindowSpec)
+
 	// Convert record specs to domain objects
-	recordsInWindow := make([]MeterRecord, len(recordsInWindowSpec))
-	for i, spec := range recordsInWindowSpec {
+	recordsInWindow := make([]MeterRecord, len(unbundledSpecs))
+	for i, spec := range unbundledSpecs {
 		record, err := NewMeterRecord(spec)
 		if err != nil {
 			return specs.MeterReadingSpec{}, fmt.Errorf("invalid record at index %d: %w", i, err)
@@ -25,14 +64,18 @@ func Aggregate(
 		recordsInWindow[i] = record
 	}
 
-	// Convert lastBefore spec if provided
+	// Convert lastBefore spec if provided (unbundle if needed)
 	var lastBeforeWindow *MeterRecord
 	if lastBeforeWindowSpec != nil {
-		record, err := NewMeterRecord(*lastBeforeWindowSpec)
-		if err != nil {
-			return specs.MeterReadingSpec{}, fmt.Errorf("invalid lastBeforeWindow: %w", err)
+		// Unbundle observations and use first one (for time-weighted-avg)
+		unbundledLast := unbundleObservations([]specs.MeterRecordSpec{*lastBeforeWindowSpec})
+		if len(unbundledLast) > 0 {
+			record, err := NewMeterRecord(unbundledLast[0])
+			if err != nil {
+				return specs.MeterReadingSpec{}, fmt.Errorf("invalid lastBeforeWindow: %w", err)
+			}
+			lastBeforeWindow = &record
 		}
-		lastBeforeWindow = &record
 	}
 
 	// Convert config spec to domain object
@@ -48,20 +91,23 @@ func Aggregate(
 	}
 
 	// Convert domain object back to spec
+	// Build ComputedValues from the reading's computed values
+	computedValuesSpec := make([]specs.ComputedValueSpec, len(reading.ComputedValues))
+	for i, cv := range reading.ComputedValues {
+		computedValuesSpec[i] = cv.ToSpec()
+	}
+
 	return specs.MeterReadingSpec{
-		ID:           reading.ID.ToString(),
-		WorkspaceID:  reading.WorkspaceID.ToString(),
-		UniverseID:   reading.UniverseID.ToString(),
-		Subject:      reading.Subject.ToString(),
-		Window:       configSpec.Window,
-		Value: specs.AggregateSpec{
-			Quantity: reading.Measurement.Quantity().String(),
-			Unit:     reading.Measurement.Unit().ToString(),
-		},
-		Aggregation:  reading.Aggregation.ToString(),
-		RecordCount:  reading.RecordCount.ToInt(),
-		CreatedAt:    reading.CreatedAt.ToTime(),
-		MaxMeteredAt: reading.MaxMeteredAt.ToTime(),
+		ID:             reading.ID.ToString(),
+		WorkspaceID:    reading.WorkspaceID.ToString(),
+		UniverseID:     reading.UniverseID.ToString(),
+		Subject:        reading.Subject.ToString(),
+		Window:         configSpec.Window,
+		ComputedValues: computedValuesSpec,
+		Aggregation:    reading.Aggregation.ToString(),
+		RecordCount:    reading.RecordCount.ToInt(),
+		CreatedAt:      reading.CreatedAt.ToTime(),
+		MaxMeteredAt:   reading.MaxMeteredAt.ToTime(),
 	}, nil
 }
 
@@ -83,7 +129,7 @@ func aggregate(
 	}
 
 	// Perform aggregation - each type uses the parameters it needs
-	aggregatedMeasurement, recordCount, err := config.Aggregation().Aggregate(recordsInWindow, lastBeforeWindow, config.Window())
+	quantity, unit, recordCount, err := config.Aggregation().Aggregate(recordsInWindow, lastBeforeWindow, config.Window())
 	if err != nil {
 		return MeterReading{}, fmt.Errorf("failed to aggregate with %s: %w", config.Aggregation().ToString(), err)
 	}
@@ -94,7 +140,7 @@ func aggregate(
 	// Build MeterReading
 	id := computeMeterReadingID(
 		metadataSource.Subject,
-		aggregatedMeasurement.Unit(),
+		unit,
 		config.Window(),
 		config.Aggregation(),
 	)
@@ -129,17 +175,24 @@ func aggregate(
 		return MeterReading{}, fmt.Errorf("invalid subject: %w", err)
 	}
 
+	// Create ComputedValue from aggregated quantity and unit
+	computedValue := NewComputedValue(
+		quantity,
+		unit,
+		config.Aggregation(),
+	)
+
 	return MeterReading{
-		ID:           id,
-		WorkspaceID:  workspaceID,
-		UniverseID:   universeID,
-		Subject:      subject,
-		Window:       config.Window(),
-		Measurement:  aggregatedMeasurement,
-		Aggregation:  config.Aggregation(),
-		RecordCount:  recordCountVO,
-		CreatedAt:    createdAt,
-		MaxMeteredAt: maxMeteredAtVO,
+		ID:             id,
+		WorkspaceID:    workspaceID,
+		UniverseID:     universeID,
+		Subject:        subject,
+		Window:         config.Window(),
+		ComputedValues: []ComputedValue{computedValue},
+		Aggregation:    config.Aggregation(),
+		RecordCount:    recordCountVO,
+		CreatedAt:      createdAt,
+		MaxMeteredAt:   maxMeteredAtVO,
 	}, nil
 }
 
@@ -165,7 +218,7 @@ func computeMaxMeteredAt(recordsInWindow []MeterRecord, lastBeforeWindow *MeterR
 // computeMeterReadingID generates a deterministic ID from the reading's key fields.
 func computeMeterReadingID(
 	subject MeterRecordSubject,
-	unit MeasurementUnit,
+	unit Unit,
 	window TimeWindow,
 	aggregation MeterReadingAggregation,
 ) MeterReadingID {

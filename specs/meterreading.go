@@ -63,16 +63,12 @@ type MeterReadingSpec struct {
 	// with RecordedAt within this window contribute to the aggregation.
 	Window TimeWindowSpec `json:"window"`
 
-	// The aggregated value result.
+	// Computed values array (one per unit).
 	//
-	// Contains the computed quantity (as a decimal string) and the unit from the
-	// source observations. All observations aggregated into this reading must
-	// share the same unit. The quantity is the result of applying the aggregation
-	// strategy (sum, max, time-weighted-avg, etc.) to the individual observations.
-	//
-	// Unlike ObservationSpec, this does not include a Window field—temporal context
-	// is provided by the parent MeterReading.Window instead.
-	Value AggregateSpec `json:"value"`
+	// Each ComputedValue contains {quantity, unit, aggregation}, making the computation
+	// strategy explicit. MeterReadings can have multiple computed values when aggregating
+	// observations with different units (e.g., input-tokens and output-tokens).
+	ComputedValues []ComputedValueSpec `json:"computedValues"`
 
 	// Aggregation strategy applied to compute the measurement.
 	//

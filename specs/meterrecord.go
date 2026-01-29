@@ -5,17 +5,23 @@ import "time"
 // MeterRecordSpec represents a single metered usage record.
 //
 // A meter record is created by applying metering configuration to an event payload.
-// It extracts a specific measurement (quantity + unit) and preserves dimensional
-// attributes for downstream aggregation and billing.
+// It extracts observations (quantity + unit + temporal context) and preserves
+// dimensional attributes for downstream aggregation and billing.
 //
-// One event payload can produce multiple meter records when the metering configuration
-// extracts multiple measurements from the same event.
+// One event payload produces one meter record containing all observations extracted
+// by the metering configuration. Multiple observations from the same event are bundled
+// together in the Observations array, ensuring atomic persistence and preserving the
+// relationship between related measurements.
 type MeterRecordSpec struct {
 	// Unique identifier for this meter record.
 	//
-	// Deterministically generated from the source event ID and the measurement unit,
-	// ensuring idempotent metering. Replaying the same event with the same metering
-	// configuration produces the same record ID.
+	// Deterministically generated from the source event ID, ensuring idempotent
+	// metering. Replaying the same event with the same metering configuration
+	// produces the same record ID.
+	//
+	// NOTE: During migration from singular Observation to Observations array,
+	// ID generation changed from including the measurement unit to using just
+	// the event ID. This ensures one event produces one record with one ID.
 	ID string `json:"id"`
 
 	// Identifier for the workspace that owns this record.
@@ -48,13 +54,13 @@ type MeterRecordSpec struct {
 	// Distinct from MeteredAt which tracks system processing time.
 	ObservedAt time.Time `json:"observedAt"`
 
-	// The observed quantity with its unit and temporal context.
+	// Multiple observations from the same event.
 	//
-	// Contains the numeric quantity (as a decimal string for precision), the unit
-	// identifier, and the temporal extent (Window field). For instant observations
-	// (gauges, discrete events), Window.Start == Window.End. For time-spanning
-	// observations (compute duration), Window.Start < Window.End.
-	Observation ObservationSpec `json:"observation"`
+	// Contains all observations extracted from a single event, ensuring atomic
+	// persistence. When one event produces multiple measurements (e.g., LLM API call
+	// with input_tokens and output_tokens), all observations are bundled in this array.
+	// This provides natural atomicity: saving the record persists all observations or none.
+	Observations []ObservationSpec `json:"observations"`
 
 	// Additional categorical attributes from the source event.
 	//
@@ -66,8 +72,8 @@ type MeterRecordSpec struct {
 	// Identifier of the source event that produced this record.
 	//
 	// Links back to the original event payload for audit trails and debugging.
-	// Multiple meter records can share the same source event ID when multiple
-	// measurements are extracted from a single event.
+	// In the current design, one event produces one record, so this typically
+	// has a one-to-one relationship with the record ID.
 	SourceEventID string `json:"sourceEventID"`
 
 	// System timestamp indicating when this record was created by the metering process.

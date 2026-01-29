@@ -43,27 +43,40 @@ type ObservationSpec struct {
 	Window TimeWindowSpec `json:"window"`
 }
 
-// AggregateSpec represents a computed aggregation result.
+// ComputedValueSpec represents a computed value from observations.
 //
-// Aggregates are produced by applying aggregation strategies (sum, max,
-// time-weighted-avg, etc.) to a collection of observations. Unlike observations,
-// aggregates do not include a Window field—temporal context is provided
-// by the parent MeterReading.Window instead.
+// This is the new naming aligned with domain terminology. ComputedValues are produced
+// by applying aggregation or transformation strategies to observations. Unlike AggregateSpec,
+// ComputedValueSpec includes the aggregation type, making the computation strategy explicit.
 //
-// The quantity is stored as a decimal string to preserve precision across
-// language implementations.
-type AggregateSpec struct {
+// The term "computed" is more general than "aggregate"—values may be computed through
+// aggregation, transformation, or other means. This flexibility accommodates future
+// non-aggregation computations while maintaining semantic clarity.
+type ComputedValueSpec struct {
 	// Numeric value as a decimal string.
 	//
-	// Result of aggregating multiple observations. Stored as string to preserve
+	// Result of computing over observations. Stored as string to preserve
 	// arbitrary precision. Examples: "1250.50", "99.95", "10000".
 	Quantity string `json:"quantity"`
 
 	// Unit identifier matching the source observations.
 	//
-	// All observations aggregated into this value must share the same unit.
+	// All observations computed into this value must share the same unit.
 	// Examples: "seats", "tokens", "compute-hours".
 	Unit string `json:"unit"`
+
+	// Aggregation strategy used to compute this value.
+	//
+	// Specifies how observations were combined:
+	//   - "sum": Add all quantities
+	//   - "max": Maximum quantity
+	//   - "min": Minimum quantity
+	//   - "latest": Most recent quantity
+	//   - "time-weighted-avg": Average weighted by time
+	//
+	// Including the aggregation type makes the computation strategy explicit,
+	// which is essential for understanding and validating the computed result.
+	Aggregation string `json:"aggregation"`
 }
 
 // NewInstantObservation creates an observation at a single point in time.
