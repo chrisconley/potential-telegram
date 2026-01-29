@@ -264,6 +264,49 @@ func (a AggregateValue) Unit() Unit {
 	return a.unit
 }
 
+// ComputedValue represents a computed value from observations.
+//
+// This is the new naming aligned with domain terminology. Unlike AggregateValue,
+// ComputedValue includes the aggregation type, making the computation strategy explicit.
+//
+// The term "computed" is more general than "aggregate"—values may be computed through
+// aggregation, transformation, or other means. This flexibility accommodates future
+// non-aggregation computations while maintaining semantic clarity.
+type ComputedValue struct {
+	quantity    Decimal
+	unit        Unit
+	aggregation MeterReadingAggregation
+}
+
+func NewComputedValue(quantity Decimal, unit Unit, aggregation MeterReadingAggregation) ComputedValue {
+	return ComputedValue{
+		quantity:    quantity,
+		unit:        unit,
+		aggregation: aggregation,
+	}
+}
+
+func (c ComputedValue) Quantity() Decimal {
+	return c.quantity
+}
+
+func (c ComputedValue) Unit() Unit {
+	return c.unit
+}
+
+func (c ComputedValue) Aggregation() MeterReadingAggregation {
+	return c.aggregation
+}
+
+// ToSpec converts ComputedValue to specs.ComputedValueSpec
+func (c ComputedValue) ToSpec() specs.ComputedValueSpec {
+	return specs.ComputedValueSpec{
+		Quantity:    c.quantity.String(),
+		Unit:        c.unit.ToString(),
+		Aggregation: c.aggregation.ToString(),
+	}
+}
+
 type MeterReadingAggregation struct {
 	value string
 }

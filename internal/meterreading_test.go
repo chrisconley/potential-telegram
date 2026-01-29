@@ -194,3 +194,67 @@ func TestTimeWindow(t *testing.T) {
 		assert.Equal(t, same, window.End().ToTime())
 	})
 }
+
+func TestNewComputedValue(t *testing.T) {
+	t.Run("creates computed value with all fields", func(t *testing.T) {
+		quantity, err := NewDecimal("1250.50")
+		require.NoError(t, err)
+
+		unit, err := NewUnit("api-tokens")
+		require.NoError(t, err)
+
+		aggregation, err := NewMeterReadingAggregation("sum")
+		require.NoError(t, err)
+
+		computed := NewComputedValue(quantity, unit, aggregation)
+
+		assert.Equal(t, "1250.50", computed.Quantity().String())
+		assert.Equal(t, "api-tokens", computed.Unit().ToString())
+		assert.Equal(t, "sum", computed.Aggregation().ToString())
+	})
+
+	t.Run("creates computed value with different aggregation types", func(t *testing.T) {
+		quantity, _ := NewDecimal("100")
+		unit, _ := NewUnit("seats")
+
+		aggregations := []string{"sum", "max", "min", "latest", "time-weighted-avg"}
+
+		for _, aggType := range aggregations {
+			agg, err := NewMeterReadingAggregation(aggType)
+			require.NoError(t, err)
+
+			computed := NewComputedValue(quantity, unit, agg)
+
+			assert.Equal(t, aggType, computed.Aggregation().ToString(),
+				"should preserve aggregation type: %s", aggType)
+		}
+	})
+}
+
+func TestComputedValue_ToSpec(t *testing.T) {
+	t.Run("converts to spec correctly", func(t *testing.T) {
+		quantity, _ := NewDecimal("1250.50")
+		unit, _ := NewUnit("api-tokens")
+		aggregation, _ := NewMeterReadingAggregation("sum")
+
+		computed := NewComputedValue(quantity, unit, aggregation)
+		spec := computed.ToSpec()
+
+		assert.Equal(t, "1250.50", spec.Quantity)
+		assert.Equal(t, "api-tokens", spec.Unit)
+		assert.Equal(t, "sum", spec.Aggregation)
+	})
+
+	t.Run("converts time-weighted-avg correctly", func(t *testing.T) {
+		quantity, _ := NewDecimal("42.75")
+		unit, _ := NewUnit("seats")
+		aggregation, _ := NewMeterReadingAggregation("time-weighted-avg")
+
+		computed := NewComputedValue(quantity, unit, aggregation)
+		spec := computed.ToSpec()
+
+		assert.Equal(t, "42.75", spec.Quantity)
+		assert.Equal(t, "seats", spec.Unit)
+		assert.Equal(t, "time-weighted-avg", spec.Aggregation)
+	})
+}
