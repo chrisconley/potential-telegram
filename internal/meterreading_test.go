@@ -122,6 +122,89 @@ func TestNewMeterReading(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "record count cannot be negative")
 	})
+
+	t.Run("creates meter reading with ComputedValues array", func(t *testing.T) {
+		now := time.Now()
+		windowStart := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+		windowEnd := time.Date(2024, 1, 31, 23, 59, 59, 0, time.UTC)
+
+		spec := specs.MeterReadingSpec{
+			ID:          "reading-456",
+			WorkspaceID: "workspace-prod",
+			UniverseID:  "production",
+			Subject:     "customer:acme",
+			Window: specs.TimeWindowSpec{
+				Start: windowStart,
+				End:   windowEnd,
+			},
+			ComputedValues: []specs.ComputedValueSpec{
+				{
+					Quantity:    "1250",
+					Unit:        "input-tokens",
+					Aggregation: "sum",
+				},
+				{
+					Quantity:    "340",
+					Unit:        "output-tokens",
+					Aggregation: "sum",
+				},
+			},
+			Aggregation:  "sum",
+			RecordCount:  5,
+			CreatedAt:    now,
+			MaxMeteredAt: now,
+		}
+
+		reading, err := NewMeterReading(spec)
+
+		require.NoError(t, err)
+		assert.Equal(t, "reading-456", reading.ID.ToString())
+		require.Len(t, reading.ComputedValues, 2, "should have two computed values")
+
+		// Verify first computed value (input-tokens)
+		assert.Equal(t, "1250", reading.ComputedValues[0].Quantity().String())
+		assert.Equal(t, "input-tokens", reading.ComputedValues[0].Unit().ToString())
+		assert.Equal(t, "sum", reading.ComputedValues[0].Aggregation().ToString())
+
+		// Verify second computed value (output-tokens)
+		assert.Equal(t, "340", reading.ComputedValues[1].Quantity().String())
+		assert.Equal(t, "output-tokens", reading.ComputedValues[1].Unit().ToString())
+		assert.Equal(t, "sum", reading.ComputedValues[1].Aggregation().ToString())
+	})
+
+	t.Run("with single ComputedValue also populates deprecated Value field", func(t *testing.T) {
+		now := time.Now()
+		spec := specs.MeterReadingSpec{
+			ID:          "reading-789",
+			WorkspaceID: "workspace-prod",
+			UniverseID:  "production",
+			Subject:     "customer:acme",
+			Window: specs.TimeWindowSpec{
+				Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+				End:   time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
+			},
+			ComputedValues: []specs.ComputedValueSpec{
+				{
+					Quantity:    "1250",
+					Unit:        "tokens",
+					Aggregation: "sum",
+				},
+			},
+			Aggregation:  "sum",
+			RecordCount:  5,
+			CreatedAt:    now,
+			MaxMeteredAt: now,
+		}
+
+		reading, err := NewMeterReading(spec)
+
+		require.NoError(t, err)
+		require.Len(t, reading.ComputedValues, 1)
+
+		// Verify deprecated Value field is populated for backwards compatibility
+		assert.Equal(t, "1250", reading.Value.Quantity().String())
+		assert.Equal(t, "tokens", reading.Value.Unit().ToString())
+	})
 }
 
 func TestMeterReadingAggregation(t *testing.T) {

@@ -12,7 +12,8 @@ type MeterReading struct {
 	UniverseID       MeterReadingUniverseID
 	Subject          MeterReadingSubject
 	Window           TimeWindow
-	Value            AggregateValue
+	Value            AggregateValue       // Deprecated: Use ComputedValues instead
+	ComputedValues   []ComputedValue      // New field: array of computed values
 	Aggregation      MeterReadingAggregation
 	RecordCount      MeterReadingRecordCount
 	CreatedAt        MeterReadingCreatedAt
@@ -45,17 +46,54 @@ func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
 		return MeterReading{}, fmt.Errorf("invalid window: %w", err)
 	}
 
-	quantity, err := NewDecimal(spec.Value.Quantity)
-	if err != nil {
-		return MeterReading{}, fmt.Errorf("invalid quantity: %w", err)
-	}
+	// Handle both old (Value) and new (ComputedValues) fields during migration
+	var value AggregateValue
+	var computedValues []ComputedValue
 
-	unit, err := NewUnit(spec.Value.Unit)
-	if err != nil {
-		return MeterReading{}, fmt.Errorf("invalid unit: %w", err)
-	}
+	if len(spec.ComputedValues) > 0 {
+		// New path: Use ComputedValues array
+		computedValues = make([]ComputedValue, len(spec.ComputedValues))
+		for i, cv := range spec.ComputedValues {
+			quantity, err := NewDecimal(cv.Quantity)
+			if err != nil {
+				return MeterReading{}, fmt.Errorf("invalid computed value %d quantity: %w", i, err)
+			}
 
-	value := NewAggregateValue(quantity, unit)
+			unit, err := NewUnit(cv.Unit)
+			if err != nil {
+				return MeterReading{}, fmt.Errorf("invalid computed value %d unit: %w", i, err)
+			}
+
+			aggregation, err := NewMeterReadingAggregation(cv.Aggregation)
+			if err != nil {
+				return MeterReading{}, fmt.Errorf("invalid computed value %d aggregation: %w", i, err)
+			}
+
+			computedValues[i] = NewComputedValue(quantity, unit, aggregation)
+		}
+
+		// For backwards compatibility, if there's exactly one computed value,
+		// also populate the deprecated Value field
+		if len(computedValues) == 1 {
+			value = NewAggregateValue(
+				computedValues[0].Quantity(),
+				computedValues[0].Unit(),
+			)
+		}
+	} else {
+		// Old path: Use Value field (backwards compatibility)
+		quantity, err := NewDecimal(spec.Value.Quantity)
+		if err != nil {
+			return MeterReading{}, fmt.Errorf("invalid quantity: %w", err)
+		}
+
+		unit, err := NewUnit(spec.Value.Unit)
+		if err != nil {
+			return MeterReading{}, fmt.Errorf("invalid unit: %w", err)
+		}
+
+		value = NewAggregateValue(quantity, unit)
+	}
 
 	aggregation, err := NewMeterReadingAggregation(spec.Aggregation)
 	if err != nil {
@@ -78,16 +116,17 @@ func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
 	}
 
 	return MeterReading{
-		ID:           id,
-		WorkspaceID:  workspaceID,
-		UniverseID:   universeID,
-		Subject:      subject,
-		Window:       window,
-		Value:        value,
-		Aggregation:  aggregation,
-		RecordCount:  recordCount,
-		CreatedAt:    createdAt,
-		MaxMeteredAt: maxMeteredAt,
+		ID:             id,
+		WorkspaceID:    workspaceID,
+		UniverseID:     universeID,
+		Subject:        subject,
+		Window:         window,
+		Value:          value,
+		ComputedValues: computedValues,
+		Aggregation:    aggregation,
+		RecordCount:    recordCount,
+		CreatedAt:      createdAt,
+		MaxMeteredAt:   maxMeteredAt,
 	}, nil
 }
 
