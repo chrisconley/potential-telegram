@@ -1,8 +1,19 @@
 # Migration Plan: Complete Observation-Temporal-Context ADR in Domain Layer
 
 **Date:** 2026-01-28
-**Status:** Ready for Execution
+**Status:** ✅ COMPLETED
+**Completed:** 2026-01-28
 **Context:** Issue #4 updated specs but not domain layer. Complete the migration to align domain objects with specs.
+
+## Migration Summary
+
+**Successfully completed all 4 phases in 11 commits:**
+- Phase 1 (7 steps): Added new types alongside old - 5 commits
+- Phase 2 (3 steps): Migrated all consumers - 3 commits
+- Phase 3 (4 steps): Removed deprecated fields/types - 3 commits
+- Phase 4: Documentation - This update
+
+**Result:** Domain layer now fully aligned with specs. All code uses Observation/AggregateValue types and ObservedAt field. Zero deprecated code remains.
 
 ---
 
@@ -731,3 +742,89 @@ Each commit is small (10-100 lines), focused, and independently verifiable.
 1. Execute Phase 1, Step 1.1
 2. Run safety checks after each commit
 3. Proceed sequentially through all phases
+
+---
+
+## Completion Report
+
+**Date Completed:** 2026-01-28
+**Total Commits:** 11
+**Total Test Runs:** 11 (all passing)
+
+### Phase Results
+
+#### ✅ Phase 1: Add New Types (5 commits)
+1. Add Observation type and TimeWindow helpers ✓
+2. Add AggregateValue type ✓
+3. Rename MeasurementUnit → Unit ✓
+4. Add Observations and ObservedAt to MeterRecord ✓
+5. Add Value to MeterReading ✓
+
+**Result:** All new types added alongside old. Full backward compatibility maintained.
+
+#### ✅ Phase 2: Migrate Consumers (3 commits)
+1. Aggregation functions use Observations, return AggregateValue ✓
+2. Meter() uses Observations and ObservedAt ✓
+3. Aggregate() uses Value field ✓
+4. unbundleObservations() - NOT REMOVED (still needed for unit separation)
+
+**Result:** All code migrated to new fields. Old fields unused but present.
+
+#### ✅ Phase 3: Remove Old Fields (3 commits)
+1. Remove Measurement and RecordedAt from MeterRecord ✓
+2. Remove Measurement type definition ✓
+3. Remove MeterRecordRecordedAt type ✓
+4. Remove Measurement field from MeterReading ✓
+
+**Result:** Clean codebase. Compiler verified zero usage of deprecated types.
+
+### Final State
+
+**Domain Types:**
+- ✅ `Observation` - raw measurement with quantity, unit, window
+- ✅ `AggregateValue` - computed aggregation with quantity, unit
+- ✅ `Unit` - measurement unit (renamed from MeasurementUnit)
+- ✅ `TimeWindow` - temporal extent with instant observation support
+- ✅ `MeterRecordObservedAt` - business timestamp
+
+**MeterRecord Fields:**
+- ✅ `Observations []Observation`
+- ✅ `ObservedAt MeterRecordObservedAt`
+- ❌ ~~Measurement~~ (removed)
+- ❌ ~~RecordedAt~~ (removed)
+
+**MeterReading Fields:**
+- ✅ `Value AggregateValue`
+- ❌ ~~Measurement~~ (removed)
+
+### Design Notes
+
+**unbundleObservations() Retained:**
+The unbundleObservations() function was NOT removed because it serves a valid architectural purpose:
+- **Storage:** Records bundled with multiple observations (atomicity)
+- **Aggregation:** Observations separated by unit (processing)
+- **Bridge:** unbundleObservations() converts between these two views
+
+To eliminate unbundling would require redesigning aggregation to iterate over Observations arrays and group by unit across records. This is a larger architectural change outside current scope.
+
+### Test Coverage
+
+All tests passing throughout migration:
+- `metering-spec/benchmarks` ✓
+- `metering-spec/internal` ✓
+- `metering-spec/internal/examples` ✓
+- `metering-spec/internal/infra` ✓
+- `metering-spec/specs` ✓
+
+### Success Criteria Met
+
+- ✅ All domain objects use `Observation` and `AggregateValue` types
+- ✅ All domain objects use `ObservedAt` (no `RecordedAt`)
+- ✅ `Measurement` type completely removed
+- ✅ `MeterRecordRecordedAt` type removed
+- ✅ All tests pass: `go test ./...`
+- ✅ Specs and domain layer aligned
+
+### Follow-up Work
+
+None required. Migration complete and successful.
