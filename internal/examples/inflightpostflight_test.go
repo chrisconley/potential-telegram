@@ -62,7 +62,7 @@ type HardcodedConfigRepo struct{}
 
 func (r *HardcodedConfigRepo) GetMeteringConfig() specs.MeteringConfigSpec {
 	return specs.MeteringConfigSpec{
-		Measurements: []specs.MeasurementExtractionSpec{
+		Observations: []specs.ObservationExtractionSpec{
 			{SourceProperty: "request_count", Unit: "requests"},
 		},
 	}

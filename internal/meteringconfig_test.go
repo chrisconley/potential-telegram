@@ -69,7 +69,7 @@ func TestMeter(t *testing.T) {
 		}
 
 		configSpec := specs.MeteringConfigSpec{
-			Measurements: []specs.MeasurementExtractionSpec{
+			Observations: []specs.ObservationExtractionSpec{
 				{
 					SourceProperty: "tokens",
 					Unit:           "api-tokens",
@@ -120,7 +120,7 @@ func TestMeter(t *testing.T) {
 		}
 
 		configSpec := specs.MeteringConfigSpec{
-			Measurements: []specs.MeasurementExtractionSpec{
+			Observations: []specs.ObservationExtractionSpec{
 				{SourceProperty: "tokens", Unit: "test-tokens"},
 			},
 		}
@@ -156,7 +156,7 @@ func TestMeter(t *testing.T) {
 		}
 
 		configSpec := specs.MeteringConfigSpec{
-			Measurements: []specs.MeasurementExtractionSpec{
+			Observations: []specs.ObservationExtractionSpec{
 				{SourceProperty: "input_tokens", Unit: "input-tokens"},
 				{SourceProperty: "output_tokens", Unit: "output-tokens"},
 			},
