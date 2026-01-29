@@ -12,7 +12,8 @@ type MeterReading struct {
 	UniverseID       MeterReadingUniverseID
 	Subject          MeterReadingSubject
 	Window           TimeWindow
-	Measurement      Measurement
+	Value            AggregateValue  // NEW - alongside Measurement
+	Measurement      Measurement     // OLD - keep for backwards compat
 	Aggregation      MeterReadingAggregation
 	RecordCount      MeterReadingRecordCount
 	CreatedAt        MeterReadingCreatedAt
@@ -55,6 +56,10 @@ func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
 		return MeterReading{}, fmt.Errorf("invalid unit: %w", err)
 	}
 
+	// NEW: Value (AggregateValue)
+	value := NewAggregateValue(quantity, unit)
+
+	// OLD: Measurement (same data for backwards compat)
 	measurement := NewMeasurement(quantity, unit)
 
 	aggregation, err := NewMeterReadingAggregation(spec.Aggregation)
@@ -83,7 +88,8 @@ func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
 		UniverseID:   universeID,
 		Subject:      subject,
 		Window:       window,
-		Measurement:  measurement,
+		Value:        value,       // NEW
+		Measurement:  measurement, // OLD
 		Aggregation:  aggregation,
 		RecordCount:  recordCount,
 		CreatedAt:    createdAt,
