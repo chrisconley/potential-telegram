@@ -43,6 +43,7 @@ func TestNewMeterReading(t *testing.T) {
 		assert.Equal(t, "customer:acme", reading.Subject.ToString())
 		assert.Equal(t, windowStart, reading.Window.Start().ToTime())
 		assert.Equal(t, windowEnd, reading.Window.End().ToTime())
+		// Old API uses deprecated Value field for backwards compatibility
 		assert.Equal(t, "1250.50", reading.Value.Quantity().String())
 		assert.Equal(t, "api-tokens", reading.Value.Unit().ToString())
 		assert.Equal(t, "sum", reading.Aggregation.ToString())

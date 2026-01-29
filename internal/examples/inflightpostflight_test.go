@@ -192,8 +192,11 @@ func (h *RatingHandler) Handle(e infra.Event) {
 	reading := e.(InFlightMeterReadEvent).Reading
 	config := h.configRepo.GetRatingConfig()
 
-	// Extract quantity from reading
-	quantity, err := internal.NewDecimal(reading.Value.Quantity)
+	// Extract quantity from reading (use first computed value)
+	if len(reading.ComputedValues) == 0 {
+		panic("No computed values in reading")
+	}
+	quantity, err := internal.NewDecimal(reading.ComputedValues[0].Quantity)
 	if err != nil {
 		panic(fmt.Sprintf("Invalid quantity: %v", err))
 	}
@@ -280,9 +283,13 @@ type CustomerBalanceHandler struct{}
 
 func (h *CustomerBalanceHandler) Handle(e infra.Event) {
 	reading := e.(PostFlightMeterReadEvent).Reading
+	if len(reading.ComputedValues) == 0 {
+		panic("No computed values in reading")
+	}
+	cv := reading.ComputedValues[0]
 	fmt.Printf("📊 Customer balance update: %s %s for window %s to %s\n",
-		reading.Value.Quantity,
-		reading.Value.Unit,
+		cv.Quantity,
+		cv.Unit,
 		reading.Window.Start.Format("15:04:05"),
 		reading.Window.End.Format("15:04:05"))
 }
@@ -381,7 +388,8 @@ func TestHighThroughputMeteringPipeline(t *testing.T) {
 
 	// Verify each 10-second reading aggregated 100 requests
 	for i, reading := range postFlightReadings {
-		assert.Equal(t, "100", reading.Value.Quantity,
+		assert.Len(t, reading.ComputedValues, 1, "should have one computed value")
+		assert.Equal(t, "100", reading.ComputedValues[0].Quantity,
 			"reading %d should aggregate 100 requests", i+1)
 	}
 

@@ -91,20 +91,23 @@ func Aggregate(
 	}
 
 	// Convert domain object back to spec
+	// Build ComputedValues from the reading's computed values
+	computedValuesSpec := make([]specs.ComputedValueSpec, len(reading.ComputedValues))
+	for i, cv := range reading.ComputedValues {
+		computedValuesSpec[i] = cv.ToSpec()
+	}
+
 	return specs.MeterReadingSpec{
-		ID:           reading.ID.ToString(),
-		WorkspaceID:  reading.WorkspaceID.ToString(),
-		UniverseID:   reading.UniverseID.ToString(),
-		Subject:      reading.Subject.ToString(),
-		Window:       configSpec.Window,
-		Value: specs.AggregateSpec{
-			Quantity: reading.Value.Quantity().String(),
-			Unit:     reading.Value.Unit().ToString(),
-		},
-		Aggregation:  reading.Aggregation.ToString(),
-		RecordCount:  reading.RecordCount.ToInt(),
-		CreatedAt:    reading.CreatedAt.ToTime(),
-		MaxMeteredAt: reading.MaxMeteredAt.ToTime(),
+		ID:             reading.ID.ToString(),
+		WorkspaceID:    reading.WorkspaceID.ToString(),
+		UniverseID:     reading.UniverseID.ToString(),
+		Subject:        reading.Subject.ToString(),
+		Window:         configSpec.Window,
+		ComputedValues: computedValuesSpec,
+		Aggregation:    reading.Aggregation.ToString(),
+		RecordCount:    reading.RecordCount.ToInt(),
+		CreatedAt:      reading.CreatedAt.ToTime(),
+		MaxMeteredAt:   reading.MaxMeteredAt.ToTime(),
 	}, nil
 }
 
@@ -172,17 +175,25 @@ func aggregate(
 		return MeterReading{}, fmt.Errorf("invalid subject: %w", err)
 	}
 
+	// Create ComputedValue from aggregatedValue
+	computedValue := NewComputedValue(
+		aggregatedValue.Quantity(),
+		aggregatedValue.Unit(),
+		config.Aggregation(),
+	)
+
 	return MeterReading{
-		ID:           id,
-		WorkspaceID:  workspaceID,
-		UniverseID:   universeID,
-		Subject:      subject,
-		Window:       config.Window(),
-		Value:        aggregatedValue,
-		Aggregation:  config.Aggregation(),
-		RecordCount:  recordCountVO,
-		CreatedAt:    createdAt,
-		MaxMeteredAt: maxMeteredAtVO,
+		ID:             id,
+		WorkspaceID:    workspaceID,
+		UniverseID:     universeID,
+		Subject:        subject,
+		Window:         config.Window(),
+		Value:          aggregatedValue,       // Keep for backwards compatibility
+		ComputedValues: []ComputedValue{computedValue}, // New field with aggregation type
+		Aggregation:    config.Aggregation(),
+		RecordCount:    recordCountVO,
+		CreatedAt:      createdAt,
+		MaxMeteredAt:   maxMeteredAtVO,
 	}, nil
 }
 
