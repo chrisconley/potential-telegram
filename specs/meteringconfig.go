@@ -60,3 +60,35 @@ type FilterSpec struct {
 	// "us-east-1", "200", "gpt-4".
 	Equals string `json:"equals"`
 }
+
+// ObservationExtractionSpec defines how to extract an observation from EventPayload.
+//
+// Specifies which property contains the numeric value, what unit to assign to it,
+// and optionally a filter to conditionally extract the observation only when certain
+// criteria are met.
+//
+// Note: This is the new naming aligned with domain terminology. Use this instead of
+// MeasurementExtractionSpec for new code.
+type ObservationExtractionSpec struct {
+	// The property key in EventPayload.Properties to extract as an observation.
+	//
+	// Must exist in the event's properties map and contain a value parseable as
+	// a decimal number. Examples: "response_time_ms", "tokens", "bytes_transferred".
+	SourceProperty string `json:"sourceProperty"`
+
+	// Unit identifier to assign to the extracted observation.
+	//
+	// Determines how this observation aggregates with others and how it gets rated
+	// for billing. Should match your rate card definitions. Examples: "api-calls",
+	// "tokens", "gb-hours", "seats".
+	Unit string `json:"unit"`
+
+	// Optional filter condition to apply before extracting the observation.
+	//
+	// If specified, the observation is only extracted when the filter matches.
+	// This enables conditional metering, such as extracting different units based
+	// on dimension values. For example, only extract "premium-requests" when
+	// the "tier" property equals "premium". If nil, the observation is always
+	// extracted.
+	Filter *FilterSpec `json:"filter,omitempty"`
+}

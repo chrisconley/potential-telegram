@@ -168,3 +168,74 @@ func NewFilterValue(value string) (FilterValue, error) {
 func (v FilterValue) ToString() string {
 	return v.value
 }
+
+// ObservationExtraction defines how to extract an observation from an event.
+// This is the new naming aligned with domain terminology (Observation for raw extracted values).
+type ObservationExtraction struct {
+	sourceProperty ObservationSourceProperty
+	unit           Unit
+	filter         *Filter
+}
+
+func NewObservationExtraction(spec specs.ObservationExtractionSpec) (ObservationExtraction, error) {
+	sourceProperty, err := NewObservationSourceProperty(spec.SourceProperty)
+	if err != nil {
+		return ObservationExtraction{}, fmt.Errorf("invalid source property: %w", err)
+	}
+
+	unit, err := NewUnit(spec.Unit)
+	if err != nil {
+		return ObservationExtraction{}, fmt.Errorf("invalid unit: %w", err)
+	}
+
+	var filter *Filter
+	if spec.Filter != nil {
+		f, err := NewFilter(*spec.Filter)
+		if err != nil {
+			return ObservationExtraction{}, fmt.Errorf("invalid filter: %w", err)
+		}
+		filter = &f
+	}
+
+	return ObservationExtraction{
+		sourceProperty: sourceProperty,
+		unit:           unit,
+		filter:         filter,
+	}, nil
+}
+
+func (o ObservationExtraction) SourceProperty() ObservationSourceProperty {
+	return o.sourceProperty
+}
+
+func (o ObservationExtraction) Unit() Unit {
+	return o.unit
+}
+
+func (o ObservationExtraction) Filter() *Filter {
+	return o.filter
+}
+
+// Matches returns true if the filter matches the payload properties (or if no filter exists).
+func (o ObservationExtraction) Matches(properties EventPayloadProperties) bool {
+	if o.filter == nil {
+		return true
+	}
+	return o.filter.Matches(properties)
+}
+
+// ObservationSourceProperty identifies which property to extract from an event.
+type ObservationSourceProperty struct {
+	value string
+}
+
+func NewObservationSourceProperty(value string) (ObservationSourceProperty, error) {
+	if value == "" {
+		return ObservationSourceProperty{}, fmt.Errorf("source property is required")
+	}
+	return ObservationSourceProperty{value: value}, nil
+}
+
+func (p ObservationSourceProperty) ToString() string {
+	return p.value
+}

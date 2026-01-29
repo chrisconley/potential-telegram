@@ -186,3 +186,174 @@ func TestMeter(t *testing.T) {
 		assert.False(t, hasOutputTokens, "should not have extracted dimension")
 	})
 }
+
+// Tests for new ObservationExtraction types (parallel to MeasurementExtraction)
+func TestNewObservationExtraction(t *testing.T) {
+	t.Run("creates valid observation extraction from spec", func(t *testing.T) {
+		spec := specs.ObservationExtractionSpec{
+			SourceProperty: "tokens",
+			Unit:           "api-tokens",
+		}
+
+		extraction, err := NewObservationExtraction(spec)
+
+		require.NoError(t, err)
+		assert.Equal(t, "tokens", extraction.SourceProperty().ToString())
+		assert.Equal(t, "api-tokens", extraction.Unit().ToString())
+		assert.Nil(t, extraction.Filter())
+	})
+
+	t.Run("creates observation extraction with filter", func(t *testing.T) {
+		spec := specs.ObservationExtractionSpec{
+			SourceProperty: "tokens",
+			Unit:           "premium-tokens",
+			Filter: &specs.FilterSpec{
+				Property: "tier",
+				Equals:   "premium",
+			},
+		}
+
+		extraction, err := NewObservationExtraction(spec)
+
+		require.NoError(t, err)
+		assert.Equal(t, "tokens", extraction.SourceProperty().ToString())
+		assert.Equal(t, "premium-tokens", extraction.Unit().ToString())
+		assert.NotNil(t, extraction.Filter())
+		assert.Equal(t, "tier", extraction.Filter().Property().ToString())
+		assert.Equal(t, "premium", extraction.Filter().Equals().ToString())
+	})
+
+	t.Run("rejects empty source property", func(t *testing.T) {
+		spec := specs.ObservationExtractionSpec{
+			SourceProperty: "",
+			Unit:           "tokens",
+		}
+
+		_, err := NewObservationExtraction(spec)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "source property")
+	})
+
+	t.Run("rejects empty unit", func(t *testing.T) {
+		spec := specs.ObservationExtractionSpec{
+			SourceProperty: "tokens",
+			Unit:           "",
+		}
+
+		_, err := NewObservationExtraction(spec)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unit")
+	})
+
+	t.Run("rejects invalid filter", func(t *testing.T) {
+		spec := specs.ObservationExtractionSpec{
+			SourceProperty: "tokens",
+			Unit:           "api-tokens",
+			Filter: &specs.FilterSpec{
+				Property: "", // Invalid
+				Equals:   "premium",
+			},
+		}
+
+		_, err := NewObservationExtraction(spec)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "filter")
+	})
+}
+
+func TestObservationExtraction_Matches(t *testing.T) {
+	t.Run("matches when no filter", func(t *testing.T) {
+		extraction, err := NewObservationExtraction(specs.ObservationExtractionSpec{
+			SourceProperty: "tokens",
+			Unit:           "api-tokens",
+		})
+		require.NoError(t, err)
+
+		payload, err := newTestEventPayload(withPayloadProperties(map[string]string{
+			"tokens": "1000",
+			"tier":   "basic",
+		}))
+		require.NoError(t, err)
+
+		assert.True(t, extraction.Matches(payload.Properties))
+	})
+
+	t.Run("matches when filter condition is met", func(t *testing.T) {
+		extraction, err := NewObservationExtraction(specs.ObservationExtractionSpec{
+			SourceProperty: "tokens",
+			Unit:           "premium-tokens",
+			Filter: &specs.FilterSpec{
+				Property: "tier",
+				Equals:   "premium",
+			},
+		})
+		require.NoError(t, err)
+
+		payload, err := newTestEventPayload(withPayloadProperties(map[string]string{
+			"tokens": "1000",
+			"tier":   "premium",
+		}))
+		require.NoError(t, err)
+
+		assert.True(t, extraction.Matches(payload.Properties))
+	})
+
+	t.Run("does not match when filter condition is not met", func(t *testing.T) {
+		extraction, err := NewObservationExtraction(specs.ObservationExtractionSpec{
+			SourceProperty: "tokens",
+			Unit:           "premium-tokens",
+			Filter: &specs.FilterSpec{
+				Property: "tier",
+				Equals:   "premium",
+			},
+		})
+		require.NoError(t, err)
+
+		payload, err := newTestEventPayload(withPayloadProperties(map[string]string{
+			"tokens": "1000",
+			"tier":   "basic",
+		}))
+		require.NoError(t, err)
+
+		assert.False(t, extraction.Matches(payload.Properties))
+	})
+
+	t.Run("does not match when filter property is missing", func(t *testing.T) {
+		extraction, err := NewObservationExtraction(specs.ObservationExtractionSpec{
+			SourceProperty: "tokens",
+			Unit:           "premium-tokens",
+			Filter: &specs.FilterSpec{
+				Property: "tier",
+				Equals:   "premium",
+			},
+		})
+		require.NoError(t, err)
+
+		payload, err := newTestEventPayload(withPayloadProperties(map[string]string{
+			"tokens": "1000",
+			// tier property missing
+		}))
+		require.NoError(t, err)
+
+		assert.False(t, extraction.Matches(payload.Properties))
+	})
+}
+
+func TestNewObservationSourceProperty(t *testing.T) {
+	t.Run("creates valid source property", func(t *testing.T) {
+		prop, err := NewObservationSourceProperty("tokens")
+
+		require.NoError(t, err)
+		assert.Equal(t, "tokens", prop.ToString())
+	})
+
+	t.Run("rejects empty value", func(t *testing.T) {
+		_, err := NewObservationSourceProperty("")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "required")
+	})
+}
