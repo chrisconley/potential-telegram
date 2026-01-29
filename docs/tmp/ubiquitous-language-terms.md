@@ -1,8 +1,9 @@
 # Ubiquitous Language: Metering Domain Terminology
 
 **Date:** 2026-01-29
-**Status:** Draft - In Review
+**Status:** Finalized
 **Purpose:** Define all domain terms explicitly following DDD principles
+**Last Updated:** After MeasurementExtraction → ObservationExtraction and AggregateValue → ComputedValue refactorings
 
 ---
 
@@ -93,30 +94,17 @@ Observation {
 ---
 
 ### Measurement
-**Definition:** *[UNDER REVIEW]* Currently used in configuration types, previously used as data type before migration.
+**Definition:** *[DEPRECATED - NOT USED IN CODEBASE]*
 
-**Current usage:**
-- ~~`MeterRecord.Measurement`~~ ← REMOVED (now `Observations`)
-- ~~`MeterReading.Measurement`~~ ← REMOVED (now `Value`)
-- `MeasurementExtraction` ← STILL EXISTS in config
-- `MeasurementSourceProperty` ← STILL EXISTS in config
+**Previous usage (REMOVED):**
+- ~~`MeasurementExtraction`~~ → Renamed to `ObservationExtraction`
+- ~~`MeasurementSourceProperty`~~ → Renamed to `ObservationSourceProperty`
 
-**Semantic question:** Is "measurement" the *process* or the *result*?
-
-**Option 1:** "Measurement" = the act of measuring
-- "MeasurementExtraction defines *how to measure*"
-- The result is an "Observation" (what was measured)
-- Intentional semantic distinction
-
-**Option 2:** "Measurement" = the result of measuring
-- Synonym for "Observation"
-- Should be renamed to align with domain data types
-
-**Option 3:** "Measurement" is industry-overloaded term
-- Could mean process (measure) or result (measurement)
-- Choose clearer domain-specific terms
-
-**Decision needed:** Review ADRs and decide if distinction is intentional.
+**Decision rationale:**
+- "Measurement" is ambiguous (could mean process or result)
+- "Observation" better captures semantics: "what was observed" (cannot be re-aggregated)
+- Aligns with observability terminology (data points, samples)
+- Term removed from codebase in favor of more precise domain terms
 
 ---
 
@@ -143,38 +131,42 @@ Observation {
 
 ## 3. Computed Values: What We Calculate
 
-### AggregateValue / Aggregate
-**Definition:** A computed value resulting from aggregating observations, representing *the answer to an aggregation query*.
+### ComputedValue
+**Definition:** A computed value resulting from applying an aggregation or transformation to observations, representing *the answer to a computation query*.
 
-**Meaning:** "During this period, using this aggregation function, the result was this quantity of this unit"
+**Meaning:** "Using this aggregation function, the result was this quantity of this unit"
 
 **Examples:**
-- "During February, customer averaged 12.32 seats" (time-weighted-avg aggregation)
-- "During February, customer consumed 12,500 tokens" (sum aggregation)
-- "During February, peak concurrent connections was 47" (max aggregation)
+- "Sum aggregation: customer consumed 12,500 tokens"
+- "Time-weighted-avg aggregation: customer averaged 12.32 seats"
+- "Max aggregation: peak concurrent connections was 47"
 
 **Structure:**
 ```go
-AggregateValue {
-    Quantity Decimal
-    Unit     Unit
+ComputedValue {
+    Quantity    Decimal
+    Unit        Unit
+    Aggregation AggregationType  // Which function produced this value
     // NO Window - temporal context is in parent MeterReading
 }
 ```
 
 **Key characteristics:**
 - Computed from observations
-- Result of an aggregation function
+- Includes the aggregation type used (essential metadata)
 - Output from aggregation
+- More general than "aggregate" (allows for future non-aggregation computations)
 - *Could* be re-aggregated with proper windowing/weighting (hierarchical aggregation)
 
 **From ADR (observation-temporal-context.md):**
 > "Aggregations are computed results from observations. Different operations are valid: can aggregate observations → readings. Type system should prevent invalid operations."
 
-**Naming note:**
-- Type is called `AggregateValue` (not just `Aggregate`) to distinguish from `Aggregate()` function
-- `AggregateSpec` in specs layer
-- Sometimes shortened to "Aggregate" when context is clear
+**Naming rationale:**
+- "Computed" is more general than "Aggregate" (not all computations are aggregations)
+- Explicitly includes aggregation type to make computation strategy transparent
+- `ComputedValueSpec` in specs layer
+
+**Previous name:** `AggregateValue` (renamed for clarity and to include aggregation type)
 
 ---
 
@@ -211,32 +203,35 @@ MeterRecord {
 ---
 
 ### MeterReading
-**Definition:** The result of aggregating meter records over a time window, containing a computed aggregate value.
+**Definition:** The result of aggregating meter records over a time window, containing one or more computed values.
 
-**Meaning:** "During this window, for this Subject and Unit, using this aggregation, the result is this value"
+**Meaning:** "During this window, for this Subject, these are the computed values (one per unit)"
 
 **Structure:**
 ```go
 MeterReading {
     ID, WorkspaceID, UniverseID, Subject
-    Window       TimeWindow        // Aggregation period
-    Value        AggregateValue    // Computed result
-    Aggregation  AggregationType   // Which function was used
-    RecordCount  int               // How many records contributed
-    CreatedAt    time.Time         // When computed
-    MaxMeteredAt time.Time         // Watermark for completeness
+    Window         TimeWindow        // Aggregation period
+    ComputedValues []ComputedValue   // Computed results (one per unit)
+    Aggregation    AggregationType   // Which function was used
+    RecordCount    int               // How many records contributed
+    CreatedAt      time.Time         // When computed
+    MaxMeteredAt   time.Time         // Watermark for completeness
 }
 ```
 
 **Key characteristics:**
 - Result of `Aggregate()` operation
-- One reading per (Subject, Unit, Window, Aggregation) tuple
+- Can contain multiple computed values (e.g., input-tokens + output-tokens)
+- Each ComputedValue has its own quantity, unit, and aggregation type
 - Derived data (can be recomputed from records)
 - Output of metering system (used for billing)
 
 **Naming rationale:**
 - "Reading" = what you get when you "read the meter"
 - Like a utility meter reading: "Your usage this month was X"
+
+**Migration note:** Previously had singular `Value` field, now has `ComputedValues` array to support multiple units per reading.
 
 ---
 
@@ -292,29 +287,32 @@ func Aggregate(
 
 ---
 
-### Extraction
-**Definition:** The specific configuration for how to extract an observation from an event's properties.
-
-**Current name in codebase:** `MeasurementExtraction`
+### ObservationExtraction
+**Definition:** The configuration for how to extract an observation from an event's properties.
 
 **Meaning:** "Extract this property, assign this unit, if this filter matches"
 
 **Structure:**
 ```go
-MeasurementExtraction {  // [NAME UNDER REVIEW]
+ObservationExtraction {
     SourceProperty string
     Unit           string
     Filter         *FilterSpec
 }
 ```
 
-**Semantic question:** Should this be called:
-- `MeasurementExtraction` (extract via measuring?)
-- `ObservationExtraction` (extract to create observation?)
-- `ValueExtraction` (extract a value?)
-- `ExtractionSpec` (generic extraction config?)
+**Key characteristics:**
+- Configuration (not data)
+- Defines which event property to extract
+- Specifies what unit to assign
+- Optionally filters which events to extract from
 
-**Decision pending:** Review with ubiquitous language principles.
+**Naming rationale:**
+- "Observation" aligns with data type produced (Observation)
+- "Extraction" clarifies this is configuration for extraction process
+- Clear relationship: ObservationExtraction → produces → Observation
+
+**Previous name:** `MeasurementExtraction` (renamed for alignment with domain terminology)
 
 ---
 
@@ -652,25 +650,49 @@ MeterReading (aggregated data)
 
 ---
 
-## Next Steps
+## Implementation Summary
 
-1. **Review this document** with team and domain experts
-2. **Decide on terminology questions:**
-   - Is "Measurement" vs "Observation" distinction intentional?
-   - Should configuration types align with data types?
-   - Are there better terms we're missing?
-3. **Check against ADRs:**
-   - `design/observation-temporal-context.md` - Does it define these terms?
-   - `design/references/observability-vs-metering.md` - Industry alignment?
-4. **Finalize ubiquitous language** and document decisions
-5. **Apply naming consistently** across code, docs, and conversations
-6. **Update any inconsistent naming** if we decide to rename
+**Status:** All naming decisions finalized and implemented in codebase.
+
+### Key Decisions Made:
+
+1. **Observation over Measurement**
+   - ✅ Renamed `MeasurementExtraction` → `ObservationExtraction`
+   - ✅ Renamed `MeasurementSourceProperty` → `ObservationSourceProperty`
+   - Rationale: "Observation" better captures "what was observed" semantics
+
+2. **ComputedValue over AggregateValue**
+   - ✅ Renamed `AggregateValue` → `ComputedValue`
+   - ✅ Renamed `AggregateSpec` → `ComputedValueSpec`
+   - ✅ Added `Aggregation` field to make computation strategy explicit
+   - Rationale: More general term, includes aggregation type metadata
+
+3. **ComputedValues Array**
+   - ✅ Changed `MeterReading.Value` (singular) → `MeterReading.ComputedValues` (array)
+   - Rationale: Supports multiple units per reading (e.g., input-tokens + output-tokens)
+
+### Migration Completed:
+
+- **Phase 1:** Added new types parallel to old ones
+- **Phase 2:** Migrated all callers to new API
+- **Phase 3:** Removed all deprecated types
+- **All tests passing:** internal, examples, benchmarks, specs
+
+### Codebase Status:
+
+- ✅ Observation terminology throughout
+- ✅ ComputedValue with explicit aggregation types
+- ✅ No deprecated types remaining
+- ✅ Consistent naming across all layers
 
 ---
 
 ## Related Documentation
 
-- `design/observation-temporal-context.md` - ADR defining Observation and AggregateValue types
+- `design/observation-temporal-context.md` - ADR defining Observation and ComputedValue types
 - `design/references/observability-vs-metering.md` - Industry terminology and counter/gauge semantics
 - `design/aggregation-types.md` - Aggregation type naming and semantics
-- `docs/tmp/measurement-extraction-naming.md` - Specific naming consideration for MeasurementExtraction
+- `docs/tmp/measurement-extraction-naming.md` - Historical: Original naming consideration (resolved)
+- Git commits:
+  - Phase 1-3: ObservationExtraction migration
+  - Phase 1-3: ComputedValue migration

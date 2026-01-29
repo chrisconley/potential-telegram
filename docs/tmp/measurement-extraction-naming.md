@@ -1,7 +1,8 @@
 # Naming Consideration: MeasurementExtraction vs ObservationExtraction
 
 **Date:** 2026-01-28
-**Status:** Proposed - Pending Ubiquitous Language Review
+**Status:** ✅ RESOLVED - Renamed to ObservationExtraction
+**Resolution Date:** 2026-01-29
 **Context:** After completing observation-temporal-context ADR migration
 
 ---
@@ -148,8 +149,36 @@ Estimated effort: ~30 minutes, 3-4 commits
 
 ---
 
+---
+
+## RESOLUTION (2026-01-29)
+
+**Decision:** Renamed to `ObservationExtraction` (Outcome 1)
+
+**Rationale:**
+1. Maintains consistency with domain data types (Observation)
+2. Clear mental model: "Configure observation extraction → get observations"
+3. Aligns with ubiquitous language established in updated docs/tmp/ubiquitous-language-terms.md
+4. Industry research showed "observation" better captures "what was observed" semantics
+5. "Measurement" is ambiguous (process vs result) - removed from codebase
+
+**Implementation:**
+- ✅ Phase 1: Added ObservationExtraction parallel to MeasurementExtraction
+- ✅ Phase 2: Migrated all callers to ObservationExtraction
+- ✅ Phase 3: Removed MeasurementExtraction (zero callers)
+- ✅ All tests passing
+
+**Additional Changes:**
+- Also migrated AggregateValue → ComputedValue (more general, includes aggregation type)
+- MeterReading.Value (singular) → MeterReading.ComputedValues (array)
+
+**See:** Git commits for detailed migration history
+
+---
+
 ## Related
 
 - `arch/work/observation-domain-layer-migration-plan.md` - Completed migration
 - `design/observation-temporal-context.md` - ADR defining Observation type
 - `design/references/meterrecord-atomicity-analysis.md` - Uses "measurements" terminology
+- `docs/tmp/ubiquitous-language-terms.md` - Finalized terminology definitions
