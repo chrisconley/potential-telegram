@@ -98,8 +98,8 @@ func Aggregate(
 		Subject:      reading.Subject.ToString(),
 		Window:       configSpec.Window,
 		Value: specs.AggregateSpec{
-			Quantity: reading.Measurement.Quantity().String(),
-			Unit:     reading.Measurement.Unit().ToString(),
+			Quantity: reading.Value.Quantity().String(),
+			Unit:     reading.Value.Unit().ToString(),
 		},
 		Aggregation:  reading.Aggregation.ToString(),
 		RecordCount:  reading.RecordCount.ToInt(),
