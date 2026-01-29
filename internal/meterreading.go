@@ -241,6 +241,29 @@ func (t TimeWindowEnd) ToTime() time.Time {
 	return t.value
 }
 
+// AggregateValue represents a computed aggregation result.
+// Unlike Observation which includes temporal context, AggregateValue does not
+// have a Window field—temporal context is provided by the parent MeterReading.
+type AggregateValue struct {
+	quantity Decimal
+	unit     MeasurementUnit
+}
+
+func NewAggregateValue(quantity Decimal, unit MeasurementUnit) AggregateValue {
+	return AggregateValue{
+		quantity: quantity,
+		unit:     unit,
+	}
+}
+
+func (a AggregateValue) Quantity() Decimal {
+	return a.quantity
+}
+
+func (a AggregateValue) Unit() MeasurementUnit {
+	return a.unit
+}
+
 type MeterReadingAggregation struct {
 	value string
 }
