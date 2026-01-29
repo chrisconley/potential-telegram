@@ -34,7 +34,7 @@ func (c MeteringConfig) Measurements() []MeasurementExtraction {
 
 type MeasurementExtraction struct {
 	sourceProperty MeasurementSourceProperty
-	unit           MeasurementUnit
+	unit           Unit
 	filter         *Filter
 }
 
@@ -44,7 +44,7 @@ func NewMeasurementExtraction(spec specs.MeasurementExtractionSpec) (Measurement
 		return MeasurementExtraction{}, fmt.Errorf("invalid source property: %w", err)
 	}
 
-	unit, err := NewMeasurementUnit(spec.Unit)
+	unit, err := NewUnit(spec.Unit)
 	if err != nil {
 		return MeasurementExtraction{}, fmt.Errorf("invalid unit: %w", err)
 	}
@@ -69,7 +69,7 @@ func (m MeasurementExtraction) SourceProperty() MeasurementSourceProperty {
 	return m.sourceProperty
 }
 
-func (m MeasurementExtraction) Unit() MeasurementUnit {
+func (m MeasurementExtraction) Unit() Unit {
 	return m.unit
 }
 

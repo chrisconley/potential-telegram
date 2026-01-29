@@ -50,7 +50,7 @@ func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
 		return MeterReading{}, fmt.Errorf("invalid quantity: %w", err)
 	}
 
-	unit, err := NewMeasurementUnit(spec.Value.Unit)
+	unit, err := NewUnit(spec.Value.Unit)
 	if err != nil {
 		return MeterReading{}, fmt.Errorf("invalid unit: %w", err)
 	}
@@ -246,10 +246,10 @@ func (t TimeWindowEnd) ToTime() time.Time {
 // have a Window field—temporal context is provided by the parent MeterReading.
 type AggregateValue struct {
 	quantity Decimal
-	unit     MeasurementUnit
+	unit     Unit
 }
 
-func NewAggregateValue(quantity Decimal, unit MeasurementUnit) AggregateValue {
+func NewAggregateValue(quantity Decimal, unit Unit) AggregateValue {
 	return AggregateValue{
 		quantity: quantity,
 		unit:     unit,
@@ -260,7 +260,7 @@ func (a AggregateValue) Quantity() Decimal {
 	return a.quantity
 }
 
-func (a AggregateValue) Unit() MeasurementUnit {
+func (a AggregateValue) Unit() Unit {
 	return a.unit
 }
 

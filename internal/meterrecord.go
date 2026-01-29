@@ -50,7 +50,7 @@ func NewMeterRecord(spec specs.MeterRecordSpec) (MeterRecord, error) {
 		return MeterRecord{}, fmt.Errorf("invalid quantity: %w", err)
 	}
 
-	unit, err := NewMeasurementUnit(observation.Unit)
+	unit, err := NewUnit(observation.Unit)
 	if err != nil {
 		return MeterRecord{}, fmt.Errorf("invalid unit: %w", err)
 	}
@@ -215,10 +215,10 @@ func (u MeterRecordUniverseID) ToString() string {
 // Measurement combines a quantity with a unit
 type Measurement struct {
 	quantity Decimal
-	unit     MeasurementUnit
+	unit     Unit
 }
 
-func NewMeasurement(quantity Decimal, unit MeasurementUnit) Measurement {
+func NewMeasurement(quantity Decimal, unit Unit) Measurement {
 	return Measurement{
 		quantity: quantity,
 		unit:     unit,
@@ -229,22 +229,22 @@ func (m Measurement) Quantity() Decimal {
 	return m.quantity
 }
 
-func (m Measurement) Unit() MeasurementUnit {
+func (m Measurement) Unit() Unit {
 	return m.unit
 }
 
-type MeasurementUnit struct {
+type Unit struct {
 	value string
 }
 
-func NewMeasurementUnit(value string) (MeasurementUnit, error) {
+func NewUnit(value string) (Unit, error) {
 	if value == "" {
-		return MeasurementUnit{}, fmt.Errorf("unit is required")
+		return Unit{}, fmt.Errorf("unit is required")
 	}
-	return MeasurementUnit{value: value}, nil
+	return Unit{value: value}, nil
 }
 
-func (u MeasurementUnit) ToString() string {
+func (u Unit) ToString() string {
 	return u.value
 }
 
@@ -252,11 +252,11 @@ func (u MeasurementUnit) ToString() string {
 // Observations are raw measurements extracted from event payloads.
 type Observation struct {
 	quantity Decimal
-	unit     MeasurementUnit
+	unit     Unit
 	window   TimeWindow
 }
 
-func NewObservation(quantity Decimal, unit MeasurementUnit, window TimeWindow) Observation {
+func NewObservation(quantity Decimal, unit Unit, window TimeWindow) Observation {
 	return Observation{
 		quantity: quantity,
 		unit:     unit,
@@ -268,7 +268,7 @@ func (o Observation) Quantity() Decimal {
 	return o.quantity
 }
 
-func (o Observation) Unit() MeasurementUnit {
+func (o Observation) Unit() Unit {
 	return o.unit
 }
 

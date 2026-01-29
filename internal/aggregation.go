@@ -208,7 +208,7 @@ func computeMaxMeteredAt(recordsInWindow []MeterRecord, lastBeforeWindow *MeterR
 // computeMeterReadingID generates a deterministic ID from the reading's key fields.
 func computeMeterReadingID(
 	subject MeterRecordSubject,
-	unit MeasurementUnit,
+	unit Unit,
 	window TimeWindow,
 	aggregation MeterReadingAggregation,
 ) MeterReadingID {
