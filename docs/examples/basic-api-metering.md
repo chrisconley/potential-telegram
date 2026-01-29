@@ -1,6 +1,6 @@
 # Basic API Metering Example
 
-This example shows the complete metering pipeline with minimal complexity: one event becomes one meter record, then aggregates into one meter reading.
+This example shows the complete metering pipeline with minimal complexity: one event becomes one meter record (with one or more observations), then observations aggregate into meter readings.
 
 ## Scenario
 
@@ -67,14 +67,16 @@ The `Meter` function transforms the event using the config:
   "universeID": "production",
   "subject": "customer:acme-corp",
   "observedAt": "2024-01-15T10:30:45Z",
-  "observation": {
-    "quantity": "145",
-    "unit": "milliseconds",
-    "window": {
-      "start": "2024-01-15T10:30:45Z",
-      "end": "2024-01-15T10:30:45Z"
+  "observations": [
+    {
+      "quantity": "145",
+      "unit": "milliseconds",
+      "window": {
+        "start": "2024-01-15T10:30:45Z",
+        "end": "2024-01-15T10:30:45Z"
+      }
     }
-  },
+  ],
   "dimensions": {
     "endpoint": "/api/v1/users",
     "status_code": "200",
@@ -86,13 +88,16 @@ The `Meter` function transforms the event using the config:
 ```
 
 **What happened:**
-- Extracted `response_time_ms` → `observation.quantity` with `unit: "milliseconds"`
+- Extracted `response_time_ms` → `observations[0].quantity` with `unit: "milliseconds"`
 - Created instant observation with `window: [T, T]` where T = event time
+- Bundled all observations in an array (this example has just one)
 - Passed through remaining properties as `dimensions`
-- Generated deterministic `id` from source event ID + unit
+- Generated deterministic `id` from source event ID
 - Added `meteredAt` timestamp for watermarking
 
 **Why this matters:** The meter record is now in a standard format for aggregation and billing, regardless of the original event schema.
+
+**Note on bundled observations:** If your metering config extracts multiple measurements from the same event (e.g., both `input_tokens` and `output_tokens` from an LLM API call), all observations are bundled in a single meter record. This ensures atomic persistence—either all measurements from an event are saved or none are.
 
 ## Step 4: Aggregation Configuration
 
@@ -148,23 +153,24 @@ The `Aggregate` function combines meter records in the window:
 ## Complete Flow Diagram
 
 ```
-EventPayload                    MeterRecord                   MeterReading
-────────────                    ───────────                   ────────────
-{                               {                             {
-  properties: {          →        observation: {       →        value: {
-    response_time_ms: "145"         quantity: "145"               quantity: "14523"
-  }                                 unit: "milliseconds"          unit: "milliseconds"
-}                                   window: [T, T]            }
-                                }                             aggregation: "sum"
-                                dimensions: {                 recordCount: 100
-                                  endpoint: "/api/users"    }
+EventPayload                    MeterRecord                      MeterReading
+────────────                    ───────────                      ────────────
+{                               {                                {
+  properties: {          →        observations: [{      →          value: {
+    response_time_ms: "145"         quantity: "145"                  quantity: "14523"
+  }                                 unit: "milliseconds"             unit: "milliseconds"
+}                                   window: [T, T]               }
+                                }]                               aggregation: "sum"
+                                dimensions: {                    recordCount: 100
+                                  endpoint: "/api/users"       }
                                   region: "us-east-1"
                                 }
                               }
 
-       ↓                               ↓                              ↓
-[Meter function]              [Aggregate function]           [Rating/Billing]
+       ↓                               ↓                                 ↓
+[Meter function]              [Aggregate function]              [Rating/Billing]
 + MeteringConfig              + AggregateConfig
+(1 event → 1 record)          (100 observations → 1 reading)
 ```
 
 ## Key Concepts Illustrated

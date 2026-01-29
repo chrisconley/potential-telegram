@@ -27,42 +27,59 @@ This spec explores a data model for these problems, with a Go reference implemen
   "id": "evt_abc123",
   "workspaceID": "acme-prod",
   "universeID": "production",
-  "type": "api.request",
+  "type": "llm.completion",
   "subject": "customer:cust_123",
   "time": "2024-01-15T10:30:00Z",
   "properties": {
-    "endpoint": "/api/users",
-    "response_time_ms": "145",
+    "input_tokens": "1250",
+    "output_tokens": "340",
+    "model": "gpt-4",
     "region": "us-east"
   }
 }
 ```
 
-**Metering config:** Extract milliseconds as a measurement
+**Metering config:** Extract token measurements
 ```json
 {
-  "measurements": [{
-    "sourceProperty": "response_time_ms",
-    "unit": "milliseconds"
-  }]
+  "measurements": [
+    {
+      "sourceProperty": "input_tokens",
+      "unit": "input-tokens"
+    },
+    {
+      "sourceProperty": "output_tokens",
+      "unit": "output-tokens"
+    }
+  ]
 }
 ```
 
-**Output:** Metered usage record
+**Output:** Metered usage record (one record with bundled observations)
 ```json
 {
-  "id": "rec_xyz789",
+  "id": "evt_abc123",
   "subject": "customer:cust_123",
-  "observation": {
-    "quantity": "145",
-    "unit": "milliseconds",
-    "window": {
-      "start": "2024-01-15T10:30:00Z",
-      "end": "2024-01-15T10:30:00Z"
+  "observations": [
+    {
+      "quantity": "1250",
+      "unit": "input-tokens",
+      "window": {
+        "start": "2024-01-15T10:30:00Z",
+        "end": "2024-01-15T10:30:00Z"
+      }
+    },
+    {
+      "quantity": "340",
+      "unit": "output-tokens",
+      "window": {
+        "start": "2024-01-15T10:30:00Z",
+        "end": "2024-01-15T10:30:00Z"
+      }
     }
-  },
+  ],
   "dimensions": {
-    "endpoint": "/api/users",
+    "model": "gpt-4",
     "region": "us-east"
   },
   "observedAt": "2024-01-15T10:30:00Z"
@@ -74,8 +91,8 @@ This spec explores a data model for these problems, with a Go reference implemen
 {
   "subject": "customer:cust_123",
   "value": {
-    "quantity": "14523",
-    "unit": "milliseconds"
+    "quantity": "125000",
+    "unit": "input-tokens"
   },
   "aggregation": "sum",
   "window": {

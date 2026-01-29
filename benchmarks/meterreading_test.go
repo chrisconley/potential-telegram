@@ -19,7 +19,7 @@ func BenchmarkMeterReading_Minimal_Memory(b *testing.B) {
 			UniverseID:   "",
 			Subject:      "",
 			Window:       specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}},
-			Measurement:  specs.MeasurementSpec{Quantity: "", Unit: ""},
+			Value:  specs.AggregateSpec{Quantity: "", Unit: ""},
 			Aggregation:  "",
 			RecordCount:  0,
 			CreatedAt:    time.Time{},
@@ -42,7 +42,7 @@ func BenchmarkMeterReading_Realistic_Memory(b *testing.B) {
 				Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 				End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 			},
-			Measurement: specs.MeasurementSpec{
+			Value: specs.AggregateSpec{
 				Quantity: "12500",
 				Unit:     "tokens",
 			},
@@ -68,7 +68,7 @@ func BenchmarkMeterReading_TimeWeightedAvg_Memory(b *testing.B) {
 				Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 				End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 			},
-			Measurement: specs.MeasurementSpec{
+			Value: specs.AggregateSpec{
 				Quantity: "12.32",
 				Unit:     "seats",
 			},
@@ -91,7 +91,7 @@ func BenchmarkMeterReading_Realistic_JSONMarshal(b *testing.B) {
 			Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 			End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 		},
-		Measurement: specs.MeasurementSpec{
+		Value: specs.AggregateSpec{
 			Quantity: "12500",
 			Unit:     "tokens",
 		},
@@ -123,7 +123,7 @@ func BenchmarkMeterReading_Realistic_JSONUnmarshal(b *testing.B) {
 			"start": "2024-02-01T00:00:00Z",
 			"end": "2024-03-01T00:00:00Z"
 		},
-		"measurement": {
+		"value": {
 			"quantity": "12500",
 			"unit": "tokens"
 		},
@@ -156,7 +156,7 @@ func BenchmarkMeterReading_Realistic_JSONRoundtrip(b *testing.B) {
 			Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 			End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 		},
-		Measurement: specs.MeasurementSpec{
+		Value: specs.AggregateSpec{
 			Quantity: "12500",
 			Unit:     "tokens",
 		},
@@ -197,7 +197,7 @@ func BenchmarkMeterReading_JSONSize(b *testing.B) {
 				UniverseID:   "",
 				Subject:      "",
 				Window:       specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}},
-				Measurement:  specs.MeasurementSpec{Quantity: "", Unit: ""},
+				Value:  specs.AggregateSpec{Quantity: "", Unit: ""},
 				Aggregation:  "",
 				RecordCount:  0,
 				CreatedAt:    time.Time{},
@@ -215,7 +215,7 @@ func BenchmarkMeterReading_JSONSize(b *testing.B) {
 					Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 					End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 				},
-				Measurement: specs.MeasurementSpec{
+				Value: specs.AggregateSpec{
 					Quantity: "12500",
 					Unit:     "tokens",
 				},
@@ -236,7 +236,7 @@ func BenchmarkMeterReading_JSONSize(b *testing.B) {
 					Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 					End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 				},
-				Measurement: specs.MeasurementSpec{
+				Value: specs.AggregateSpec{
 					Quantity: "12.32",
 					Unit:     "seats",
 				},

@@ -39,12 +39,18 @@ func NewMeterRecord(spec specs.MeterRecordSpec) (MeterRecord, error) {
 		return MeterRecord{}, fmt.Errorf("invalid subject: %w", err)
 	}
 
-	quantity, err := NewDecimal(spec.Observation.Quantity)
+	// Get observation from Observations array (should have exactly one after unbundling)
+	if len(spec.Observations) == 0 {
+		return MeterRecord{}, fmt.Errorf("observations array is empty")
+	}
+	observation := spec.Observations[0]
+
+	quantity, err := NewDecimal(observation.Quantity)
 	if err != nil {
 		return MeterRecord{}, fmt.Errorf("invalid quantity: %w", err)
 	}
 
-	unit, err := NewMeasurementUnit(spec.Observation.Unit)
+	unit, err := NewMeasurementUnit(observation.Unit)
 	if err != nil {
 		return MeterRecord{}, fmt.Errorf("invalid unit: %w", err)
 	}
