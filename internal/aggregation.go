@@ -126,7 +126,7 @@ func aggregate(
 	}
 
 	// Perform aggregation - each type uses the parameters it needs
-	aggregatedMeasurement, recordCount, err := config.Aggregation().Aggregate(recordsInWindow, lastBeforeWindow, config.Window())
+	aggregatedValue, recordCount, err := config.Aggregation().Aggregate(recordsInWindow, lastBeforeWindow, config.Window())
 	if err != nil {
 		return MeterReading{}, fmt.Errorf("failed to aggregate with %s: %w", config.Aggregation().ToString(), err)
 	}
@@ -137,7 +137,7 @@ func aggregate(
 	// Build MeterReading
 	id := computeMeterReadingID(
 		metadataSource.Subject,
-		aggregatedMeasurement.Unit(),
+		aggregatedValue.Unit(),
 		config.Window(),
 		config.Aggregation(),
 	)
@@ -172,13 +172,17 @@ func aggregate(
 		return MeterReading{}, fmt.Errorf("invalid subject: %w", err)
 	}
 
+	// Create Measurement for backwards compatibility
+	aggregatedMeasurement := NewMeasurement(aggregatedValue.Quantity(), aggregatedValue.Unit())
+
 	return MeterReading{
 		ID:           id,
 		WorkspaceID:  workspaceID,
 		UniverseID:   universeID,
 		Subject:      subject,
 		Window:       config.Window(),
-		Measurement:  aggregatedMeasurement,
+		Value:        aggregatedValue,       // NEW
+		Measurement:  aggregatedMeasurement, // OLD
 		Aggregation:  config.Aggregation(),
 		RecordCount:  recordCountVO,
 		CreatedAt:    createdAt,
