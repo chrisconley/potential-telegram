@@ -46,16 +46,18 @@ func Meter(payloadSpec specs.EventPayloadSpec, configSpec specs.MeteringConfigSp
 	for _, eventRecords := range recordsByEvent {
 		// Use first record for common fields
 		firstRecord := eventRecords[0]
-		observedAt := firstRecord.RecordedAt.ToTime()
+		observedAt := firstRecord.ObservedAt.ToTime()
 
-		// Bundle all observations
+		// Bundle all observations from eventRecords
 		observations := make([]specs.ObservationSpec, len(eventRecords))
 		for i, record := range eventRecords {
-			observations[i] = specs.NewInstantObservation(
-				record.Measurement.Quantity().String(),
-				record.Measurement.Unit().ToString(),
-				observedAt,
-			)
+			// Each record already has Observations[0] from meter()
+			// Copy the ObservationSpec directly
+			observations[i] = specs.ObservationSpec{
+				Quantity: record.Observations[0].Quantity().String(),
+				Unit:     record.Observations[0].Unit().ToString(),
+				Window:   record.Observations[0].Window().ToSpec(),
+			}
 		}
 
 		recordSpec := specs.MeterRecordSpec{
