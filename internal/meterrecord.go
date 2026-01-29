@@ -11,10 +11,8 @@ type MeterRecord struct {
 	WorkspaceID   MeterRecordWorkspaceID
 	UniverseID    MeterRecordUniverseID
 	Subject       MeterRecordSubject
-	ObservedAt    MeterRecordObservedAt  // NEW - alongside RecordedAt
-	RecordedAt    MeterRecordRecordedAt  // OLD - keep for backwards compat
-	Observations  []Observation          // NEW - alongside Measurement
-	Measurement   Measurement            // OLD - keep for backwards compat
+	ObservedAt    MeterRecordObservedAt
+	Observations  []Observation
 	Dimensions    MeterRecordDimensions
 	SourceEventID MeterRecordSourceEventID
 	MeteredAt     MeterRecordMeteredAt
@@ -66,25 +64,9 @@ func NewMeterRecord(spec specs.MeterRecordSpec) (MeterRecord, error) {
 		observations[i] = NewObservation(quantity, unit, window)
 	}
 
-	// OLD: Extract first observation for backwards compatibility
-	var measurement Measurement
-	if len(observations) > 0 {
-		measurement = NewMeasurement(
-			observations[0].Quantity(),
-			observations[0].Unit(),
-		)
-	}
-
-	// NEW: ObservedAt
 	observedAt, err := NewMeterRecordObservedAt(spec.ObservedAt)
 	if err != nil {
 		return MeterRecord{}, fmt.Errorf("invalid observed at: %w", err)
-	}
-
-	// OLD: RecordedAt (same value for backwards compat)
-	recordedAt, err := NewMeterRecordRecordedAt(spec.ObservedAt)
-	if err != nil {
-		return MeterRecord{}, fmt.Errorf("invalid recorded at: %w", err)
 	}
 
 	dimensions := NewMeterRecordDimensions()
@@ -107,10 +89,8 @@ func NewMeterRecord(spec specs.MeterRecordSpec) (MeterRecord, error) {
 		WorkspaceID:   workspaceID,
 		UniverseID:    universeID,
 		Subject:       subject,
-		ObservedAt:    observedAt,    // NEW
-		RecordedAt:    recordedAt,    // OLD
-		Observations:  observations,  // NEW
-		Measurement:   measurement,   // OLD
+		ObservedAt:    observedAt,
+		Observations:  observations,
 		Dimensions:    dimensions,
 		SourceEventID: sourceEventID,
 		MeteredAt:     meteredAt,
