@@ -11,8 +11,10 @@ type MeterRecord struct {
 	WorkspaceID   MeterRecordWorkspaceID
 	UniverseID    MeterRecordUniverseID
 	Subject       MeterRecordSubject
-	RecordedAt    MeterRecordRecordedAt
-	Measurement   Measurement
+	ObservedAt    MeterRecordObservedAt  // NEW - alongside RecordedAt
+	RecordedAt    MeterRecordRecordedAt  // OLD - keep for backwards compat
+	Observations  []Observation          // NEW - alongside Measurement
+	Measurement   Measurement            // OLD - keep for backwards compat
 	Dimensions    MeterRecordDimensions
 	SourceEventID MeterRecordSourceEventID
 	MeteredAt     MeterRecordMeteredAt
@@ -39,27 +41,50 @@ func NewMeterRecord(spec specs.MeterRecordSpec) (MeterRecord, error) {
 		return MeterRecord{}, fmt.Errorf("invalid subject: %w", err)
 	}
 
-	// Get observation from Observations array (should have exactly one after unbundling)
+	// Build observations from spec.Observations array
 	if len(spec.Observations) == 0 {
 		return MeterRecord{}, fmt.Errorf("observations array is empty")
 	}
-	observation := spec.Observations[0]
 
-	quantity, err := NewDecimal(observation.Quantity)
-	if err != nil {
-		return MeterRecord{}, fmt.Errorf("invalid quantity: %w", err)
+	observations := make([]Observation, len(spec.Observations))
+	for i, obsSpec := range spec.Observations {
+		quantity, err := NewDecimal(obsSpec.Quantity)
+		if err != nil {
+			return MeterRecord{}, fmt.Errorf("invalid observation[%d] quantity: %w", i, err)
+		}
+
+		unit, err := NewUnit(obsSpec.Unit)
+		if err != nil {
+			return MeterRecord{}, fmt.Errorf("invalid observation[%d] unit: %w", i, err)
+		}
+
+		window, err := TimeWindowFromSpec(obsSpec.Window)
+		if err != nil {
+			return MeterRecord{}, fmt.Errorf("invalid observation[%d] window: %w", i, err)
+		}
+
+		observations[i] = NewObservation(quantity, unit, window)
 	}
 
-	unit, err := NewUnit(observation.Unit)
-	if err != nil {
-		return MeterRecord{}, fmt.Errorf("invalid unit: %w", err)
+	// OLD: Extract first observation for backwards compatibility
+	var measurement Measurement
+	if len(observations) > 0 {
+		measurement = NewMeasurement(
+			observations[0].Quantity(),
+			observations[0].Unit(),
+		)
 	}
 
-	measurement := NewMeasurement(quantity, unit)
-
-	recordedAt, err := NewMeterRecordRecordedAt(spec.ObservedAt)
+	// NEW: ObservedAt
+	observedAt, err := NewMeterRecordObservedAt(spec.ObservedAt)
 	if err != nil {
 		return MeterRecord{}, fmt.Errorf("invalid observed at: %w", err)
+	}
+
+	// OLD: RecordedAt (same value for backwards compat)
+	recordedAt, err := NewMeterRecordRecordedAt(spec.ObservedAt)
+	if err != nil {
+		return MeterRecord{}, fmt.Errorf("invalid recorded at: %w", err)
 	}
 
 	dimensions := NewMeterRecordDimensions()
@@ -82,8 +107,10 @@ func NewMeterRecord(spec specs.MeterRecordSpec) (MeterRecord, error) {
 		WorkspaceID:   workspaceID,
 		UniverseID:    universeID,
 		Subject:       subject,
-		RecordedAt:    recordedAt,
-		Measurement:   measurement,
+		ObservedAt:    observedAt,    // NEW
+		RecordedAt:    recordedAt,    // OLD
+		Observations:  observations,  // NEW
+		Measurement:   measurement,   // OLD
 		Dimensions:    dimensions,
 		SourceEventID: sourceEventID,
 		MeteredAt:     meteredAt,
@@ -132,6 +159,21 @@ func NewMeterRecordRecordedAt(value time.Time) (MeterRecordRecordedAt, error) {
 }
 
 func (t MeterRecordRecordedAt) ToTime() time.Time {
+	return t.value
+}
+
+type MeterRecordObservedAt struct {
+	value time.Time
+}
+
+func NewMeterRecordObservedAt(value time.Time) (MeterRecordObservedAt, error) {
+	if value.IsZero() {
+		return MeterRecordObservedAt{}, fmt.Errorf("observed at is required")
+	}
+	return MeterRecordObservedAt{value: value}, nil
+}
+
+func (t MeterRecordObservedAt) ToTime() time.Time {
 	return t.value
 }
 
