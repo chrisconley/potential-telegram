@@ -24,9 +24,12 @@ func TestNewMeterReading(t *testing.T) {
 				Start: windowStart,
 				End:   windowEnd,
 			},
-			Value: specs.AggregateSpec{
-				Quantity: "1250.50",
-				Unit:     "api-tokens",
+			ComputedValues: []specs.ComputedValueSpec{
+				{
+					Quantity:    "1250.50",
+					Unit:        "api-tokens",
+					Aggregation: "sum",
+				},
 			},
 			Aggregation:  "sum",
 			RecordCount:  5,
@@ -43,9 +46,11 @@ func TestNewMeterReading(t *testing.T) {
 		assert.Equal(t, "customer:acme", reading.Subject.ToString())
 		assert.Equal(t, windowStart, reading.Window.Start().ToTime())
 		assert.Equal(t, windowEnd, reading.Window.End().ToTime())
-		// Old API uses deprecated Value field for backwards compatibility
-		assert.Equal(t, "1250.50", reading.Value.Quantity().String())
-		assert.Equal(t, "api-tokens", reading.Value.Unit().ToString())
+		// Verify ComputedValues
+		require.Len(t, reading.ComputedValues, 1)
+		assert.Equal(t, "1250.50", reading.ComputedValues[0].Quantity().String())
+		assert.Equal(t, "api-tokens", reading.ComputedValues[0].Unit().ToString())
+		assert.Equal(t, "sum", reading.ComputedValues[0].Aggregation().ToString())
 		assert.Equal(t, "sum", reading.Aggregation.ToString())
 		assert.Equal(t, 5, reading.RecordCount.ToInt())
 		assert.Equal(t, now, reading.CreatedAt.ToTime())
@@ -62,9 +67,8 @@ func TestNewMeterReading(t *testing.T) {
 				Start: time.Time{}, // Zero value
 				End:   time.Now(),
 			},
-			Value: specs.AggregateSpec{
-				Quantity: "100",
-				Unit:     "tokens",
+			ComputedValues: []specs.ComputedValueSpec{
+				{Quantity: "100", Unit: "tokens", Aggregation: "sum"},
 			},
 			Aggregation: "sum",
 			RecordCount: 1,
@@ -86,9 +90,8 @@ func TestNewMeterReading(t *testing.T) {
 				Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 				End:   time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
 			},
-			Value: specs.AggregateSpec{
-				Quantity: "100",
-				Unit:     "tokens",
+			ComputedValues: []specs.ComputedValueSpec{
+				{Quantity: "100", Unit: "tokens", Aggregation: "invalid-agg"},
 			},
 			Aggregation: "invalid-agg",
 			RecordCount: 1,
@@ -110,9 +113,8 @@ func TestNewMeterReading(t *testing.T) {
 				Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 				End:   time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
 			},
-			Value: specs.AggregateSpec{
-				Quantity: "100",
-				Unit:     "tokens",
+			ComputedValues: []specs.ComputedValueSpec{
+				{Quantity: "100", Unit: "tokens", Aggregation: "sum"},
 			},
 			Aggregation: "sum",
 			RecordCount: -1,
@@ -173,7 +175,7 @@ func TestNewMeterReading(t *testing.T) {
 		assert.Equal(t, "sum", reading.ComputedValues[1].Aggregation().ToString())
 	})
 
-	t.Run("with single ComputedValue also populates deprecated Value field", func(t *testing.T) {
+	t.Run("with single ComputedValue creates valid reading", func(t *testing.T) {
 		now := time.Now()
 		spec := specs.MeterReadingSpec{
 			ID:          "reading-789",
@@ -201,10 +203,9 @@ func TestNewMeterReading(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, reading.ComputedValues, 1)
-
-		// Verify deprecated Value field is populated for backwards compatibility
-		assert.Equal(t, "1250", reading.Value.Quantity().String())
-		assert.Equal(t, "tokens", reading.Value.Unit().ToString())
+		assert.Equal(t, "1250", reading.ComputedValues[0].Quantity().String())
+		assert.Equal(t, "tokens", reading.ComputedValues[0].Unit().ToString())
+		assert.Equal(t, "sum", reading.ComputedValues[0].Aggregation().ToString())
 	})
 }
 

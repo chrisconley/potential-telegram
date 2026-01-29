@@ -7,17 +7,16 @@ import (
 )
 
 type MeterReading struct {
-	ID               MeterReadingID
-	WorkspaceID      MeterReadingWorkspaceID
-	UniverseID       MeterReadingUniverseID
-	Subject          MeterReadingSubject
-	Window           TimeWindow
-	Value            AggregateValue       // Deprecated: Use ComputedValues instead
-	ComputedValues   []ComputedValue      // New field: array of computed values
-	Aggregation      MeterReadingAggregation
-	RecordCount      MeterReadingRecordCount
-	CreatedAt        MeterReadingCreatedAt
-	MaxMeteredAt     MeterReadingMaxMeteredAt
+	ID             MeterReadingID
+	WorkspaceID    MeterReadingWorkspaceID
+	UniverseID     MeterReadingUniverseID
+	Subject        MeterReadingSubject
+	Window         TimeWindow
+	ComputedValues []ComputedValue
+	Aggregation    MeterReadingAggregation
+	RecordCount    MeterReadingRecordCount
+	CreatedAt      MeterReadingCreatedAt
+	MaxMeteredAt   MeterReadingMaxMeteredAt
 }
 
 func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
@@ -46,53 +45,29 @@ func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
 		return MeterReading{}, fmt.Errorf("invalid window: %w", err)
 	}
 
-	// Handle both old (Value) and new (ComputedValues) fields during migration
-	var value AggregateValue
-	var computedValues []ComputedValue
+	// Convert ComputedValues from spec to domain objects
+	if len(spec.ComputedValues) == 0 {
+		return MeterReading{}, fmt.Errorf("at least one computed value is required")
+	}
 
-	if len(spec.ComputedValues) > 0 {
-		// New path: Use ComputedValues array
-		computedValues = make([]ComputedValue, len(spec.ComputedValues))
-		for i, cv := range spec.ComputedValues {
-			quantity, err := NewDecimal(cv.Quantity)
-			if err != nil {
-				return MeterReading{}, fmt.Errorf("invalid computed value %d quantity: %w", i, err)
-			}
-
-			unit, err := NewUnit(cv.Unit)
-			if err != nil {
-				return MeterReading{}, fmt.Errorf("invalid computed value %d unit: %w", i, err)
-			}
-
-			aggregation, err := NewMeterReadingAggregation(cv.Aggregation)
-			if err != nil {
-				return MeterReading{}, fmt.Errorf("invalid computed value %d aggregation: %w", i, err)
-			}
-
-			computedValues[i] = NewComputedValue(quantity, unit, aggregation)
-		}
-
-		// For backwards compatibility, if there's exactly one computed value,
-		// also populate the deprecated Value field
-		if len(computedValues) == 1 {
-			value = NewAggregateValue(
-				computedValues[0].Quantity(),
-				computedValues[0].Unit(),
-			)
-		}
-	} else {
-		// Old path: Use Value field (backwards compatibility)
-		quantity, err := NewDecimal(spec.Value.Quantity)
+	computedValues := make([]ComputedValue, len(spec.ComputedValues))
+	for i, cv := range spec.ComputedValues {
+		quantity, err := NewDecimal(cv.Quantity)
 		if err != nil {
-			return MeterReading{}, fmt.Errorf("invalid quantity: %w", err)
+			return MeterReading{}, fmt.Errorf("invalid computed value %d quantity: %w", i, err)
 		}
 
-		unit, err := NewUnit(spec.Value.Unit)
+		unit, err := NewUnit(cv.Unit)
 		if err != nil {
-			return MeterReading{}, fmt.Errorf("invalid unit: %w", err)
+			return MeterReading{}, fmt.Errorf("invalid computed value %d unit: %w", i, err)
 		}
 
-		value = NewAggregateValue(quantity, unit)
+		aggregation, err := NewMeterReadingAggregation(cv.Aggregation)
+		if err != nil {
+			return MeterReading{}, fmt.Errorf("invalid computed value %d aggregation: %w", i, err)
+		}
+
+		computedValues[i] = NewComputedValue(quantity, unit, aggregation)
 	}
 
 	aggregation, err := NewMeterReadingAggregation(spec.Aggregation)
@@ -121,7 +96,6 @@ func NewMeterReading(spec specs.MeterReadingSpec) (MeterReading, error) {
 		UniverseID:     universeID,
 		Subject:        subject,
 		Window:         window,
-		Value:          value,
 		ComputedValues: computedValues,
 		Aggregation:    aggregation,
 		RecordCount:    recordCount,
@@ -280,29 +254,6 @@ func (t TimeWindowEnd) ToTime() time.Time {
 	return t.value
 }
 
-// AggregateValue represents a computed aggregation result.
-// Unlike Observation which includes temporal context, AggregateValue does not
-// have a Window field—temporal context is provided by the parent MeterReading.
-type AggregateValue struct {
-	quantity Decimal
-	unit     Unit
-}
-
-func NewAggregateValue(quantity Decimal, unit Unit) AggregateValue {
-	return AggregateValue{
-		quantity: quantity,
-		unit:     unit,
-	}
-}
-
-func (a AggregateValue) Quantity() Decimal {
-	return a.quantity
-}
-
-func (a AggregateValue) Unit() Unit {
-	return a.unit
-}
-
 // ComputedValue represents a computed value from observations.
 //
 // This is the new naming aligned with domain terminology. Unlike AggregateValue,
@@ -395,39 +346,41 @@ func (a MeterReadingAggregation) IsMin() bool {
 //   - sum/max/min/latest: use recordsInWindow only
 //   - time-weighted-avg: uses all parameters
 //
-// Returns the aggregated value, record count, and any error.
+// Returns the aggregated quantity, unit, record count, and any error.
 func (a MeterReadingAggregation) Aggregate(
 	recordsInWindow []MeterRecord,
 	lastBeforeWindow *MeterRecord,
 	window TimeWindow,
-) (AggregateValue, int, error) {
+) (Decimal, Unit, int, error) {
 	switch a.value {
 	case "sum":
-		value, err := sumRecords(recordsInWindow)
-		return value, len(recordsInWindow), err
+		quantity, unit, err := sumRecords(recordsInWindow)
+		return quantity, unit, len(recordsInWindow), err
 
 	case "max":
-		value, err := maxRecords(recordsInWindow)
-		return value, len(recordsInWindow), err
+		quantity, unit, err := maxRecords(recordsInWindow)
+		return quantity, unit, len(recordsInWindow), err
 
 	case "min":
-		value, err := minRecords(recordsInWindow)
-		return value, len(recordsInWindow), err
+		quantity, unit, err := minRecords(recordsInWindow)
+		return quantity, unit, len(recordsInWindow), err
 
 	case "latest":
-		value, err := latestRecord(recordsInWindow)
-		return value, len(recordsInWindow), err
+		quantity, unit, err := latestRecord(recordsInWindow)
+		return quantity, unit, len(recordsInWindow), err
 
 	case "time-weighted-avg":
-		value, err := timeWeightedAvgRecords(recordsInWindow, lastBeforeWindow, window)
+		quantity, unit, err := timeWeightedAvgRecords(recordsInWindow, lastBeforeWindow, window)
 		recordCount := len(recordsInWindow)
 		if lastBeforeWindow != nil {
 			recordCount++ // Count the carry-forward record
 		}
-		return value, recordCount, err
+		return quantity, unit, recordCount, err
 
 	default:
-		return AggregateValue{}, 0, fmt.Errorf("unsupported aggregation type: %s", a.value)
+		var zeroDecimal Decimal
+		var zeroUnit Unit
+		return zeroDecimal, zeroUnit, 0, fmt.Errorf("unsupported aggregation type: %s", a.value)
 	}
 }
 
@@ -478,9 +431,12 @@ func (m MeterReadingMaxMeteredAt) ToTime() time.Time {
 
 // sumRecords returns the sum of all record observations.
 // Returns error if records is empty or observations are incompatible.
-func sumRecords(records []MeterRecord) (AggregateValue, error) {
+func sumRecords(records []MeterRecord) (Decimal, Unit, error) {
+	var zeroDecimal Decimal
+	var zeroUnit Unit
+
 	if len(records) == 0 {
-		return AggregateValue{}, fmt.Errorf("cannot sum empty records")
+		return zeroDecimal, zeroUnit, fmt.Errorf("cannot sum empty records")
 	}
 
 	// Use first observation from first record
@@ -491,14 +447,17 @@ func sumRecords(records []MeterRecord) (AggregateValue, error) {
 		sum = sum.Add(r.Observations[0].Quantity())
 	}
 
-	return NewAggregateValue(sum, unit), nil
+	return sum, unit, nil
 }
 
 // maxRecords returns the maximum observation from all records.
 // Returns error if records is empty.
-func maxRecords(records []MeterRecord) (AggregateValue, error) {
+func maxRecords(records []MeterRecord) (Decimal, Unit, error) {
+	var zeroDecimal Decimal
+	var zeroUnit Unit
+
 	if len(records) == 0 {
-		return AggregateValue{}, fmt.Errorf("cannot find max of empty records")
+		return zeroDecimal, zeroUnit, fmt.Errorf("cannot find max of empty records")
 	}
 
 	maxQuantity := records[0].Observations[0].Quantity()
@@ -510,14 +469,17 @@ func maxRecords(records []MeterRecord) (AggregateValue, error) {
 		}
 	}
 
-	return NewAggregateValue(maxQuantity, unit), nil
+	return maxQuantity, unit, nil
 }
 
 // minRecords returns the minimum observation from all records.
 // Returns error if records is empty.
-func minRecords(records []MeterRecord) (AggregateValue, error) {
+func minRecords(records []MeterRecord) (Decimal, Unit, error) {
+	var zeroDecimal Decimal
+	var zeroUnit Unit
+
 	if len(records) == 0 {
-		return AggregateValue{}, fmt.Errorf("cannot find min of empty records")
+		return zeroDecimal, zeroUnit, fmt.Errorf("cannot find min of empty records")
 	}
 
 	minQuantity := records[0].Observations[0].Quantity()
@@ -529,14 +491,17 @@ func minRecords(records []MeterRecord) (AggregateValue, error) {
 		}
 	}
 
-	return NewAggregateValue(minQuantity, unit), nil
+	return minQuantity, unit, nil
 }
 
 // latestRecord returns the observation from the most recent record by ObservedAt timestamp.
 // Returns error if records is empty.
-func latestRecord(records []MeterRecord) (AggregateValue, error) {
+func latestRecord(records []MeterRecord) (Decimal, Unit, error) {
+	var zeroDecimal Decimal
+	var zeroUnit Unit
+
 	if len(records) == 0 {
-		return AggregateValue{}, fmt.Errorf("cannot find latest of empty records")
+		return zeroDecimal, zeroUnit, fmt.Errorf("cannot find latest of empty records")
 	}
 
 	latest := records[0]
@@ -546,7 +511,7 @@ func latestRecord(records []MeterRecord) (AggregateValue, error) {
 		}
 	}
 
-	return NewAggregateValue(latest.Observations[0].Quantity(), latest.Observations[0].Unit()), nil
+	return latest.Observations[0].Quantity(), latest.Observations[0].Unit(), nil
 }
 
 // timeWeightedAvgRecords computes the time-weighted average of gauge readings.
@@ -566,7 +531,10 @@ func timeWeightedAvgRecords(
 	recordsInWindow []MeterRecord,
 	lastBeforeWindow *MeterRecord,
 	window TimeWindow,
-) (AggregateValue, error) {
+) (Decimal, Unit, error) {
+	var zeroDecimal Decimal
+	var zeroUnit Unit
+
 	// Combine records (last-before + in-window)
 	var allRecords []MeterRecord
 	if lastBeforeWindow != nil {
@@ -575,7 +543,7 @@ func timeWeightedAvgRecords(
 	allRecords = append(allRecords, recordsInWindow...)
 
 	if len(allRecords) == 0 {
-		return AggregateValue{}, fmt.Errorf("cannot compute time-weighted average: no records")
+		return zeroDecimal, zeroUnit, fmt.Errorf("cannot compute time-weighted average: no records")
 	}
 
 	// Sort by ObservedAt timestamp
@@ -627,5 +595,5 @@ func timeWeightedAvgRecords(
 
 	avg := weightedSum.Div(totalDuration)
 
-	return NewAggregateValue(avg, unit), nil
+	return avg, unit, nil
 }

@@ -177,7 +177,9 @@ func TestMeterReadingSizeBreakdown(t *testing.T) {
 				UniverseID:   "",
 				Subject:      "",
 				Window:       specs.TimeWindowSpec{Start: time.Time{}, End: time.Time{}},
-				Value:        specs.AggregateSpec{Quantity: "", Unit: ""},
+				ComputedValues: []specs.ComputedValueSpec{
+					{Quantity: "", Unit: "", Aggregation: "sum"},
+				},
 				Aggregation:  "",
 				RecordCount:  0,
 				CreatedAt:    time.Time{},
@@ -195,9 +197,8 @@ func TestMeterReadingSizeBreakdown(t *testing.T) {
 					Start: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 					End:   time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 				},
-				Value: specs.AggregateSpec{
-					Quantity: "12500",
-					Unit:     "tokens",
+				ComputedValues: []specs.ComputedValueSpec{
+					{Quantity: "12500", Unit: "tokens", Aggregation: "sum"},
 				},
 				Aggregation:  "sum",
 				RecordCount:  1250,
@@ -343,8 +344,8 @@ func estimateMeterReadingSize(r specs.MeterReadingSpec) int {
 	size += 24 // End
 
 	// AggregateSpec
-	size += 16 + len(r.Value.Quantity)
-	size += 16 + len(r.Value.Unit)
+	size += 16 + len(r.ComputedValues[0].Quantity)
+	size += 16 + len(r.ComputedValues[0].Unit)
 
 	// int field
 	size += 8 // RecordCount
@@ -445,8 +446,8 @@ func estimateMeterReadingPostgresSize(r specs.MeterReadingSpec) int {
 	size += 1 + len(r.UniverseID)
 	size += 1 + len(r.Subject)
 	size += 1 + len(r.Aggregation)
-	size += 1 + len(r.Value.Quantity)
-	size += 1 + len(r.Value.Unit)
+	size += 1 + len(r.ComputedValues[0].Quantity)
+	size += 1 + len(r.ComputedValues[0].Unit)
 
 	// TIMESTAMPs
 	size += 8 // Window.Start
@@ -468,14 +469,14 @@ func TestStructSizes(t *testing.T) {
 	var record specs.MeterRecordSpec
 	var reading specs.MeterReadingSpec
 	var observation specs.ObservationSpec
-	var aggregate specs.AggregateSpec
+	var computed specs.ComputedValueSpec
 	var window specs.TimeWindowSpec
 
 	t.Logf("EventPayloadSpec:  %d bytes", unsafe.Sizeof(event))
 	t.Logf("MeterRecordSpec:   %d bytes", unsafe.Sizeof(record))
 	t.Logf("MeterReadingSpec:  %d bytes", unsafe.Sizeof(reading))
 	t.Logf("ObservationSpec:   %d bytes", unsafe.Sizeof(observation))
-	t.Logf("AggregateSpec:     %d bytes", unsafe.Sizeof(aggregate))
+	t.Logf("ComputedValueSpec: %d bytes", unsafe.Sizeof(computed))
 	t.Logf("TimeWindowSpec:    %d bytes", unsafe.Sizeof(window))
 	t.Logf("time.Time:         %d bytes", unsafe.Sizeof(time.Time{}))
 	t.Logf("string header:     %d bytes", unsafe.Sizeof(""))

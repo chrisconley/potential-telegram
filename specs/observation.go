@@ -43,29 +43,6 @@ type ObservationSpec struct {
 	Window TimeWindowSpec `json:"window"`
 }
 
-// AggregateSpec represents a computed aggregation result.
-//
-// Aggregates are produced by applying aggregation strategies (sum, max,
-// time-weighted-avg, etc.) to a collection of observations. Unlike observations,
-// aggregates do not include a Window field—temporal context is provided
-// by the parent MeterReading.Window instead.
-//
-// The quantity is stored as a decimal string to preserve precision across
-// language implementations.
-type AggregateSpec struct {
-	// Numeric value as a decimal string.
-	//
-	// Result of aggregating multiple observations. Stored as string to preserve
-	// arbitrary precision. Examples: "1250.50", "99.95", "10000".
-	Quantity string `json:"quantity"`
-
-	// Unit identifier matching the source observations.
-	//
-	// All observations aggregated into this value must share the same unit.
-	// Examples: "seats", "tokens", "compute-hours".
-	Unit string `json:"unit"`
-}
-
 // ComputedValueSpec represents a computed value from observations.
 //
 // This is the new naming aligned with domain terminology. ComputedValues are produced
