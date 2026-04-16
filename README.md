@@ -1,32 +1,19 @@
-# Metering Specification
+# metering-spec
 
-**Experimental prototype** for usage metering and billing aggregation.
+Data contracts and a Go reference implementation for usage metering — the part of billing that answers "how much did each customer use?"
 
-This is a work-in-progress exploration of data contracts for metering pipelines. Expect breaking changes as we iterate based on real-world feedback.
+That question is harder than it sounds. Your API emits events with a bag of properties (`input_tokens`, `output_tokens`, `model`, `region`). Some of those properties are quantities you bill for. Others are dimensions you filter by. Different event types need different extraction rules. Some customers are metered by total usage (sum), others by peak concurrent usage (max), others by average seat count weighted across the billing period (time-weighted average). Your test environment needs to run the same pipeline as production without cross-contaminating billing data. And every number has to be exact — no floating-point drift in financial calculations.
 
-## What is this?
+This spec defines the data shapes and pure functions for that pipeline: take raw events in, get billable quantities out.
 
-This spec defines data contracts for transforming raw usage events into billable meter readings. It provides a complete pipeline from event ingestion through metering to time-windowed aggregation, with built-in support for multi-tenancy, test isolation, and flexible attribution models.
+## How it works
 
-## Why does this exist?
+The pipeline has two stages. First, **extract** measurements from raw events. Then, **aggregate** those measurements over billing windows.
 
-Building usage-based billing systems requires solving the same problems repeatedly:
-- **Flexible event schemas** - Different products need different properties without coordinating type changes
-- **Multi-tenant isolation** - Regional workspaces with global customers, test/prod separation, post-merger integration
-- **Conditional metering** - Extract different measurements based on event properties
-- **Time-windowed aggregation** - Sum, max, time-weighted-average over billing periods
-- **Precision** - Exact decimal arithmetic for financial calculations
-
-This spec explores a data model for these problems, with a Go reference implementation.
-
-## Quick Example
-
-**Input:** Raw usage event
+**A raw usage event** — your application emits these with whatever properties are relevant:
 ```json
 {
   "id": "evt_abc123",
-  "workspaceID": "acme-prod",
-  "universeID": "production",
   "type": "llm.completion",
   "subject": "customer:cust_123",
   "time": "2024-01-15T10:30:00Z",
@@ -39,157 +26,152 @@ This spec explores a data model for these problems, with a Go reference implemen
 }
 ```
 
-**Metering config:** Extract token measurements
+**An extraction config** — tells the pipeline which properties are quantities and what units to assign:
 ```json
 {
-  "measurements": [
-    {
-      "sourceProperty": "input_tokens",
-      "unit": "input-tokens"
-    },
-    {
-      "sourceProperty": "output_tokens",
-      "unit": "output-tokens"
-    }
+  "observations": [
+    { "sourceProperty": "input_tokens", "unit": "input-tokens" },
+    { "sourceProperty": "output_tokens", "unit": "output-tokens" }
   ]
 }
 ```
 
-**Output:** Metered usage record (one record with bundled observations)
+**A metered record** — the extracted quantities (observations) with remaining properties preserved as dimensions:
 ```json
 {
   "id": "evt_abc123",
   "subject": "customer:cust_123",
   "observations": [
-    {
-      "quantity": "1250",
-      "unit": "input-tokens",
-      "window": {
-        "start": "2024-01-15T10:30:00Z",
-        "end": "2024-01-15T10:30:00Z"
-      }
-    },
-    {
-      "quantity": "340",
-      "unit": "output-tokens",
-      "window": {
-        "start": "2024-01-15T10:30:00Z",
-        "end": "2024-01-15T10:30:00Z"
-      }
-    }
+    { "quantity": "1250", "unit": "input-tokens", "window": { "start": "...", "end": "..." } },
+    { "quantity": "340", "unit": "output-tokens", "window": { "start": "...", "end": "..." } }
   ],
-  "dimensions": {
-    "model": "gpt-4",
-    "region": "us-east"
-  },
-  "observedAt": "2024-01-15T10:30:00Z"
+  "dimensions": { "model": "gpt-4", "region": "us-east" }
 }
 ```
 
-**Aggregation:** Sum over billing period
+**A billable quantity** — observations aggregated over a billing window:
 ```json
 {
   "subject": "customer:cust_123",
-  "value": {
-    "quantity": "125000",
-    "unit": "input-tokens"
-  },
-  "aggregation": "sum",
-  "window": {
-    "start": "2024-01-15T00:00:00Z",
-    "end": "2024-01-16T00:00:00Z"
-  },
+  "computedValues": [
+    { "quantity": "125000", "unit": "input-tokens", "aggregation": "sum" }
+  ],
+  "window": { "start": "2024-01-01T00:00:00Z", "end": "2024-02-01T00:00:00Z" },
   "recordCount": 100
 }
 ```
 
-## Key Features
+This is where metering-spec's job ends. The reading says "customer cust_123 used 125,000 input-tokens this month." What that costs is a pricing/rating concern handled elsewhere.
 
-### Two-Dimensional Isolation
+Properties that aren't extracted as observations (`model`, `region`) become **dimensions** — available for filtering and grouping downstream.
 
-**Workspace × Universe** model enables:
-- Multi-region with global customers (different schemas per region, shared customer identity)
-- Test/staging/production separation (isolate test data from production billing)
-- What-if scenarios and simulations (parallel universes for pricing experiments)
-- Post-merger integration (namespace legacy systems without ID collisions)
+## Who this is for
 
-See [workspace-universe-isolation.md](design/workspace-universe-isolation.md) for design rationale.
+You're building a system where:
 
-### Flexible Event Schemas
+- **Customers are billed based on what they use** — API calls, tokens, compute hours, storage, seats, or any countable resource
+- **Usage events come from multiple sources** with different schemas, and you need a consistent metering layer
+- **Aggregation isn't just "sum"** — you need peak usage (max), time-weighted averages (seat count over a month), or latest-value gauges
+- **Billing periods matter** — you need to window usage into hourly, daily, or monthly buckets for invoicing
+- **Precision matters** — you're doing financial math and can't tolerate floating-point drift
 
-Events use untyped `properties` maps, allowing each workspace to define custom schemas without coordinating type system changes. Metering configs extract typed measurements at processing time.
+This spec doesn't handle pricing, invoicing, payments, or revenue recognition. It produces the quantities that those systems consume.
 
-### Conditional Metering
+## Running it
 
-Extract different measurements based on event properties. For example, meter requests differently based on customer tier or region.
+```bash
+git clone https://github.com/chrisconley/potential-telegram.git
+cd potential-telegram
+go test ./...
+```
 
-### Aggregation Strategies
+The Go reference implementation lives in `internal/`. The two core functions:
 
-- **sum** - Total usage (API calls, tokens consumed)
-- **max** - Peak usage (concurrent connections, queue depth)
-- **min** - Minimum value in window
-- **latest** - Most recent value by timestamp
-- **time-weighted-avg** - Average weighted by duration (seat count, resource allocation)
+```go
+import (
+    "metering-spec/internal"
+    "metering-spec/specs"
+)
 
-### Language Interoperability
+// Stage 1: Meter an event — extract observations from properties
+records, err := internal.Meter(eventPayload, meteringConfig)
 
-All specs use primitives-only types (strings, numbers, time) with JSON serialization. Includes Go reference implementation in `internal/`.
+// Stage 2: Aggregate records — combine over a billing window
+reading, err := internal.Aggregate(records, lastBeforeWindow, aggregateConfig)
+```
 
-### Precision and Financial Calculations
+## Aggregation strategies
 
-Quantities in metering-spec are represented as **decimal strings** (e.g., `"123.45"`) to avoid floating-point precision issues in JSON serialization.
+| Strategy | Use case | Example |
+|----------|----------|---------|
+| **sum** | Cumulative usage | Total API calls, tokens consumed |
+| **max** | Peak usage | Concurrent connections, queue depth |
+| **min** | Minimum in window | Lowest price, minimum inventory |
+| **latest** | Current state | Most recent gauge reading |
+| **time-weighted-avg** | Average over time | Seat count across a billing month |
 
-For **billing and financial use cases**, implementations SHOULD:
-- Use exact decimal arithmetic (no floating point)
-- Implement consistent rounding rules (recommend: banker's rounding / half-to-even)
-- Ensure reproducible calculations (same inputs → same outputs)
-- Guarantee allocation totals when splitting values (sum of parts = original whole)
+Time-weighted average treats each observation as a step function — if a customer had 10 seats for 20 days then 15 seats for 10 days, the average is 11.67, not 12.5.
 
-**Go implementations:** See [`cockroachdb/apd/v3`](https://github.com/cockroachdb/apd) for exact decimal arithmetic suitable for financial calculations. This repo's [`internal/decimal.go`](internal/decimal.go) provides a minimal reference wrapper.
+## Multi-tenant isolation
 
-**Other languages:** Consider decimal libraries appropriate for financial calculations:
-- Python: `decimal.Decimal` (stdlib)
-- JavaScript: `bignumber.js`, `decimal.js`
-- Java: `java.math.BigDecimal`
-- Ruby: `BigDecimal` (stdlib)
+Events are scoped by two dimensions:
+
+- **Workspace** — operational boundary (US region, EU region, a business unit). Each workspace owns its event schemas and metering configs.
+- **Universe** — data namespace (production, test, staging, simulation). The same customer ID in different universes is a different billing entity.
+
+This means you can run test data through the same pipeline as production without cross-contamination, or meter the same customer differently in different regions.
+
+See [workspace-universe-isolation.md](design/workspace-universe-isolation.md) for the full design rationale.
+
+## Conditional metering
+
+Extract different observations based on event properties using filters:
+
+```json
+{
+  "observations": [
+    {
+      "sourceProperty": "request_count",
+      "unit": "premium-requests",
+      "filter": { "property": "tier", "equals": "premium" }
+    },
+    {
+      "sourceProperty": "request_count",
+      "unit": "standard-requests",
+      "filter": { "property": "tier", "equals": "standard" }
+    }
+  ]
+}
+```
+
+Same event type, different units based on customer tier. Downstream, premium and standard requests can be rated at different prices.
+
+## Precision
+
+All quantities are decimal strings (`"123.45"`, not `123.45`). No floating-point anywhere in the spec. The Go implementation uses [`cockroachdb/apd`](https://github.com/cockroachdb/apd) for arbitrary-precision decimal arithmetic.
+
+## Repository structure
+
+```
+specs/           Data contracts (language-agnostic Go structs with JSON tags)
+internal/        Go reference implementation (Meter, Aggregate)
+  examples/      Working end-to-end pipeline example
+design/          Architecture decision records
+docs/examples/   Walkthrough guides
+benchmarks/      Performance tests
+```
 
 ## Documentation
 
-- **[Basic Example](docs/examples/basic-api-metering.md)** - Simple walkthrough with JSON examples
-- **[Architecture](docs/architecture.md)** - Pipeline stages and data flow
-- **[API Reference](specs/)** - Inline documentation for all data types
-- **[Core Concepts](docs/concepts.md)** - Workspace, Universe, Subject, Measurements, Aggregations
-- **[Production Patterns](docs/examples/production-patterns.md)** - High-throughput metering pipeline
-- **[Design Rationale](docs/design/)** - Architecture decision records
-
-## Repository Structure
-
-```
-metering-spec/
-├── specs/           # Primitives-only data contracts (language-agnostic)
-│   ├── eventpayload.go
-│   ├── meterrecord.go
-│   ├── meterreading.go
-│   └── ...
-├── internal/        # Go reference implementation
-│   ├── meter.go     # EventPayload → MeterRecord transformation
-│   ├── aggregate.go # MeterRecord → MeterReading aggregation
-│   └── examples/    # Working code examples
-└── docs/            # Conceptual documentation and guides
-```
+- **[Basic API Metering](docs/examples/basic-api-metering.md)** — step-by-step walkthrough with JSON examples
+- **[Workspace-Universe Isolation](design/workspace-universe-isolation.md)** — why two dimensions, not one
+- **[Observation Temporal Context](design/observation-temporal-context.md)** — instant vs. time-spanning observations
+- **[Aggregation Types](design/aggregation-types.md)** — design rationale for aggregation strategies
 
 ## Status
 
-**Experimental prototype.** This spec is actively evolving based on design principles and real-world requirements. The core data model is being refined through [Architecture Decision Records](design/) that guide implementation work.
+Pre-1.0. The core pipeline (event → meter → aggregate) works and is tested. The data contracts are actively evolving. Expect breaking changes.
 
-**Current state:**
-- [design/](design/) contains working ADRs that define the target design
-- [GitHub Issues](https://github.com/chrisconley/potential-telegram/issues) track active implementation work
+## License
 
-Expect breaking changes. Nothing is stable yet.
-
-If you're implementing this, please share feedback on what works and what doesn't.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on proposing changes to the spec.
+[To be determined]
