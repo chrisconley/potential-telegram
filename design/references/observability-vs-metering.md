@@ -51,14 +51,14 @@ Observability systems classify metrics into distinct types based on their semant
 - **Semantics:** Monotonically increasing value (only goes up, resets to zero on restart)
 - **Examples:** Total HTTP requests, total bytes sent, total errors
 - **Query pattern:** Use `rate()` or `increase()` to get change over time
-- **Mapping to metering:** Counter → Event aggregations (`sum-events`, `max-event`)
+- **Mapping to metering:** Counter → Event aggregations (`sum`, `max`, `latest`)
 - **Key difference:** Observability counters track cumulative totals; metering counters track discrete events
 
 #### Gauge
 - **Semantics:** Point-in-time value that can go up or down
 - **Examples:** Current memory usage, concurrent connections, queue depth, active seats
 - **Query pattern:** Use `avg_over_time()`, `max_over_time()`, `min_over_time()`
-- **Mapping to metering:** Gauge → State aggregations (`time-weighted-avg`, `peak-state`, `final-state`)
+- **Mapping to metering:** Gauge → State aggregations (`time-weighted-avg`, `max`, `latest`)
 - **Key difference:** Observability gauges are sampled periodically; metering gauges require state reconstruction
 
 #### Histogram
@@ -88,7 +88,7 @@ Observability systems classify metrics into distinct types based on their semant
 #### Labels / Dimensions
 - **Definition:** Key-value pairs attached to metrics for filtering and grouping
 - **Example:** `{service="api", region="us-east", customer="acme"}`
-- **Mapping to metering:** Similar to Event.Dimensions, but observability has cardinality constraints
+- **Mapping to metering:** Similar to event properties/dimensions, but observability has cardinality constraints
 
 #### Cardinality
 - **Definition:** Number of unique label combination → number of time series
@@ -191,22 +191,19 @@ Algorithm:
 
 **Correct answer: 12.32 seats** (not 12.5)
 
-### Your Implementation
+### metering-spec's Approach
 
-From `metering/meterreading.go:329-425`:
+The [`Aggregate`](../../specs/aggregate.go) function signature captures this requirement:
 
 ```go
-// timeWeightedAvgRecords computes the time-weighted average of gauge readings.
-// Uses step interpolation: each value holds until the next reading (or window end).
-//
-// Algorithm:
-//  1. Combine lastBeforeWindow (if exists) + recordsInWindow
-//  2. Sort by timestamp
-//  3. For each reading, compute: value × duration_until_next_reading
-//  4. Sum weighted values and divide by total window duration
+type Aggregate func(
+    recordsInWindow []MeterRecordSpec,
+    lastBeforeWindow *MeterRecordSpec,
+    config AggregateConfigSpec,
+) (MeterReadingSpec, error)
 ```
 
-**Key insight:** The `lastBeforeWindow` parameter carries forward state from before the billing period, which is essential for accurate gauge aggregation.
+**Key insight:** The `lastBeforeWindow` parameter carries forward gauge state from before the billing period. Without it, a gauge set before the window but unchanged during it would appear as zero usage — which is wrong. This ensures accurate time-weighted aggregation even when no new events arrive during the window.
 
 ### Systems That Do Support Time-Weighted Averages
 
@@ -272,14 +269,11 @@ From `metering/meterreading.go:329-425`:
 
 **Adopt:** Explicit distinction between counters and gauges
 
-**Your implementation:**
-- Counter aggregations: `sum-events`, `max-event`, `min-event`, `latest-event`
-- Gauge aggregations: `time-weighted-avg`, `peak-state`, `min-state`, `final-state`
+**metering-spec aggregation types** (from [`AggregateConfigSpec`](../../specs/aggregate.go)):
+- Counter aggregations: `sum`, `max`, `min`, `latest`
+- Gauge aggregations: `time-weighted-avg`, `max`, `min`, `latest`
 
-**From `metering-spec/docs/aggregation-types.md`:**
-- Aggregation names encode semantic operation (not just implementation)
-- Self-documenting, type-safe by design
-- Mirrors OpenTelemetry's Counter vs UpDownCounter
+Aggregation names encode the semantic operation (not just implementation), mirroring OpenTelemetry's Counter vs UpDownCounter distinction. See [issue #5](https://github.com/chrisconley/potential-telegram/issues/5) for a proposed change to make counter vs gauge intent explicit in the aggregation name itself (e.g., `sum-events` vs `peak-state`).
 
 ### ✅ 2. Dimensional/Label Model
 
@@ -287,7 +281,7 @@ From `metering/meterreading.go:329-425`:
 
 **Mapping:**
 - Observability: `http_requests{service="api", region="us-east"}`
-- Metering: `Event.Dimensions map[string]string`
+- Metering: `EventPayload.Properties map[string]string`
 
 **Benefit:** Flexible querying without schema changes
 
@@ -303,10 +297,10 @@ From `metering/meterreading.go:329-425`:
 - Common attributes: `service.name`, `http.method`, `db.system`
 - Units in metadata, not names
 
-**Your implementation:**
-- Unit system: `precision.Measure[D]` with typed units
-- Workspace-specific schemas: `IngestionConfig` per (workspace, event_type)
-- Properties → Measures/Dimensions transformation
+**metering-spec mapping:**
+- Quantities as decimal strings with explicit unit on each [`ObservationSpec`](../../specs/observation.go)
+- Per-meter schemas: [`MeteringConfigSpec`](../../specs/meteringconfig.go) with `ObservationExtractionSpec`
+- `EventPayload.Properties` → extracted observations + remaining dimensions
 
 ### ✅ 4. Cardinality Awareness
 
@@ -317,8 +311,8 @@ From `metering/meterreading.go:329-425`:
 - Solution: Aggregate at ingestion, use recording rules, drop labels
 
 **Metering application:**
-- MeterRecord has `(customer, unit)` as key dimensions → bounded cardinality
-- Event has `Properties map[string]string` → could have high-cardinality values
+- Meter records keyed by (subject, unit) → bounded cardinality
+- Event payloads use `Properties map[string]string` → could have high-cardinality values
 - `lastBeforeWindow` pattern reduces storage (don't keep full gauge history)
 
 ---
@@ -405,7 +399,7 @@ Several open source projects bridge the gap between observability and billing:
 
 All these systems provide **higher-level products** (billing platforms) rather than **specifications**.
 
-**Your project's differentiator:** Building a metering specification with domain-driven design, event-driven architecture, and principled abstractions (Measure types, aggregation semantics, etc.).
+**This project's differentiator:** A metering specification with domain-driven design, event-driven architecture, and principled abstractions (observation types, aggregation semantics, etc.).
 
 ---
 
@@ -413,12 +407,12 @@ All these systems provide **higher-level products** (billing platforms) rather t
 
 | Observability Concept | Metering Equivalent | Notes |
 |-----------------------|---------------------|-------|
-| Counter metric | Event aggregation (`sum-events`) | Discrete events, not cumulative totals |
+| Counter metric | Event aggregation (`sum`) | Discrete events, not cumulative totals |
 | Gauge metric | State aggregation (`time-weighted-avg`) | Requires state reconstruction |
 | Histogram | Rare in billing | Might analyze event value distributions |
-| Time series | MeterRecord stream per (customer, unit) | But with 100% retention |
+| Time series | MeterRecord stream per (subject, unit) | But with 100% retention |
 | Sample/data point | MeterRecord | Must never be dropped |
-| Labels/dimensions | Event.Dimensions | Cardinality still matters |
+| Labels/dimensions | EventPayload.Properties / MeterRecord.Dimensions | Cardinality still matters |
 | Scrape interval | Event arrival time | Push-based, not pull |
 | Recording rule | MeterReading | Pre-aggregated, but auditable |
 | Cardinality | Same concept | Design with care |
@@ -469,7 +463,7 @@ All these systems provide **higher-level products** (billing platforms) rather t
 2. **Time-weighted averages are critical**
    - Observability: `avg_over_time()` is arithmetic mean (not time-weighted)
    - Metering: Must use step interpolation for gauge aggregations
-   - Your implementation is correct; most observability systems are not
+   - metering-spec's `time-weighted-avg` is correct; most observability systems are not
 
 3. **Adopt useful patterns**
    - Metric type taxonomy (counter vs gauge)
@@ -485,7 +479,7 @@ All these systems provide **higher-level products** (billing platforms) rather t
 
 5. **Existing OSS metering solutions**
    - OpenMeter, Lago, Flexprice, UniBee exist as products
-   - Your spec takes a different approach: principled design, domain-driven patterns
+   - This spec takes a different approach: principled design, domain-driven patterns
 
 ---
 
@@ -528,12 +522,11 @@ All these systems provide **higher-level products** (billing platforms) rather t
 - [UniBee](https://unibee.dev/)
 - [TechCrunch: OpenMeter makes it easier for companies to track usage-based billing](https://techcrunch.com/2024/03/12/openmeter-makes-it-easier-for-companies-to-track-usage-based-billing/)
 
-### Internal Documentation
+### metering-spec
 
-- `metering-spec/docs/aggregation-types.md` - Counter vs gauge aggregation semantics
-- `metering/aggregationtype.go` - Aggregation type implementation
-- `metering/meterreading.go:329-425` - Time-weighted average implementation
-- `arch/reference/chris-design-principles.md` - Design principles applied
+- [`specs/aggregate.go`](../../specs/aggregate.go) - Aggregation types and time-weighted average interface
+- [`specs/observation.go`](../../specs/observation.go) - Observation spec with decimal string quantities
+- [`specs/meteringconfig.go`](../../specs/meteringconfig.go) - Metering configuration and observation extraction
 
 ---
 
@@ -543,6 +536,6 @@ All these systems provide **higher-level products** (billing platforms) rather t
 
 **Metering requires stronger guarantees**: zero data loss, exact aggregations, complete audit trails, and idempotent processing. Time-weighted averages exemplify this: `avg_over_time()` is fine for dashboards, but wrong for billing.
 
-**Your metering spec benefits from understanding both domains**: adopting observability's clean abstractions while maintaining the rigorous correctness that billing demands.
+**A metering spec benefits from understanding both domains**: adopting observability's clean abstractions while maintaining the rigorous correctness that billing demands.
 
 When building metering systems, **learn from Prometheus, but don't use it as your database**.

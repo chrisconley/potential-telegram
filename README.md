@@ -145,7 +145,7 @@ For **billing and financial use cases**, implementations SHOULD:
 - Ensure reproducible calculations (same inputs → same outputs)
 - Guarantee allocation totals when splitting values (sum of parts = original whole)
 
-**Go implementations:** See [meters/shared/precision](https://github.com/chrisconley/meters/tree/main/shared/precision) (not yet public) for a production-ready reference implementation that provides financial-grade precision.
+**Go implementations:** See [`cockroachdb/apd/v3`](https://github.com/cockroachdb/apd) for exact decimal arithmetic suitable for financial calculations. This repo's [`internal/decimal.go`](internal/decimal.go) provides a minimal reference wrapper.
 
 **Other languages:** Consider decimal libraries appropriate for financial calculations:
 - Python: `decimal.Decimal` (stdlib)
