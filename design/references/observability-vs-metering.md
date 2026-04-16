@@ -273,7 +273,7 @@ type Aggregate func(
 - Counter aggregations: `sum`, `max`, `min`, `latest`
 - Gauge aggregations: `time-weighted-avg`, `max`, `min`, `latest`
 
-Aggregation names encode the semantic operation (not just implementation), mirroring OpenTelemetry's Counter vs UpDownCounter distinction.
+Aggregation names encode the semantic operation (not just implementation), mirroring OpenTelemetry's Counter vs UpDownCounter distinction. See [issue #5](https://github.com/chrisconley/potential-telegram/issues/5) for a proposed change to make counter vs gauge intent explicit in the aggregation name itself (e.g., `sum-events` vs `peak-state`).
 
 ### ✅ 2. Dimensional/Label Model
 
