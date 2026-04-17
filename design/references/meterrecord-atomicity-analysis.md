@@ -354,7 +354,7 @@ Replay attempt 2:
 
 ### Current Implementation Shows Atomicity Already Broken
 
-From `/Users/chris/workspace/meters/metering-spec/internal/examples/inflightpostflight_test.go:96-107`:
+From `/Users/chris/workspace/meters/metron/internal/examples/inflightpostflight_test.go:96-107`:
 
 ```go
 records, err := internal.Meter(payload, config)
@@ -380,7 +380,7 @@ for _, record := range records {
 
 ### Documentation Says "Multiple Records from One Event"
 
-From `/Users/chris/workspace/meters/metering-spec/specs/meterrecord.go:11-12`:
+From `/Users/chris/workspace/meters/metron/specs/meterrecord.go:11-12`:
 
 > "One event payload can produce multiple meter records when the metering configuration extracts multiple measurements from the same event."
 
@@ -710,10 +710,10 @@ bus.Publish(MeterRecordEvent{Record: record})  // Single publish
 
 ### Internal
 - `/Users/chris/workspace/meters/arch/reference/chris-design-principles.md` - Design principles applied
-- `/Users/chris/workspace/meters/metering-spec/specs/meterrecord.go` - Current spec
-- `/Users/chris/workspace/meters/metering-spec/internal/metering.go` - Meter() implementation
-- `/Users/chris/workspace/meters/metering-spec/internal/aggregation.go` - Aggregate() implementation
-- `/Users/chris/workspace/meters/metering-spec/internal/examples/inflightpostflight_test.go` - Publishing pattern
+- `/Users/chris/workspace/meters/metron/specs/meterrecord.go` - Current spec
+- `/Users/chris/workspace/meters/metron/internal/metering.go` - Meter() implementation
+- `/Users/chris/workspace/meters/metron/internal/aggregation.go` - Aggregate() implementation
+- `/Users/chris/workspace/meters/metron/internal/examples/inflightpostflight_test.go` - Publishing pattern
 
 ### Industry Patterns
 - Double-entry accounting: Transaction header + line items pattern

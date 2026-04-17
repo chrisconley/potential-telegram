@@ -8,7 +8,7 @@ import (
 	"time"
 	"unsafe"
 
-	"metering-spec/specs"
+	"github.com/chrisconley/metron/specs"
 )
 
 // SizeBreakdown provides size estimates for different contexts

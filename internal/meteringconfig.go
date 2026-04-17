@@ -2,7 +2,7 @@ package internal
 
 import (
 	"fmt"
-	specs "metering-spec/specs"
+	specs "github.com/chrisconley/metron/specs"
 )
 
 type MeteringConfig struct {

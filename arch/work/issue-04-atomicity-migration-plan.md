@@ -1,7 +1,7 @@
 # Issue #4: MeterRecord Atomicity Migration Plan
 
 **Date:** 2026-01-28
-**Issue:** [#4 Bundle multiple observations in single MeterRecord for atomicity](https://github.com/chrisconley/metering-spec/issues/4)
+**Issue:** [#4 Bundle multiple observations in single MeterRecord for atomicity](https://github.com/chrisconley/metron/issues/4)
 **Strategy:** Planned Refactoring (Add, Migrate, Remove)
 
 ---
@@ -429,7 +429,7 @@ Migration is complete when:
 
 ## References
 
-- **Issue:** [#4](https://github.com/chrisconley/metering-spec/issues/4)
+- **Issue:** [#4](https://github.com/chrisconley/metron/issues/4)
 - **Design analysis:** `design/references/meterrecord-atomicity-analysis.md`
 - **ADR:** `design/observation-temporal-context.md`
 - **Pattern guide:** `/Users/chris/.claude/skills/refactoring-sequencer/add-migrate-remove-guide.md`

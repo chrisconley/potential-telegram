@@ -1,6 +1,6 @@
 # Issue #1: Separate Observation and Aggregation types with temporal context
 
-**GitHub Issue:** https://github.com/chrisconley/potential-telegram/issues/1
+**GitHub Issue:** https://github.com/chrisconley/metron/issues/1
 **Autonomy Rating:** 85/100
 **Confidence Level:** High
 **Status:** Ready for implementation

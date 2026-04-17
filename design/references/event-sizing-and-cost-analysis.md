@@ -348,7 +348,7 @@ CREATE TABLE events (
 
 ## Practical Size Calculation: EventPayloadSpec
 
-From `metering-spec/specs/eventpayload.go`:
+From `metron/specs/eventpayload.go`:
 
 ```go
 type EventPayloadSpec struct {
@@ -1481,9 +1481,9 @@ The cost analysis shows that **engineering time spent on premature optimization*
 - [AWS Timestream Pricing](https://aws.amazon.com/timestream/pricing/)
 
 ### Internal Documentation
-- `metering-spec/docs/references/observability-vs-metering.md` - Observability vs metering patterns
-- `metering-spec/specs/eventpayload.go` - Event payload specification
-- `metering-spec/internal/examples/inflightpostflight_README.md` - Aggregation architecture
+- `metron/docs/references/observability-vs-metering.md` - Observability vs metering patterns
+- `metron/specs/eventpayload.go` - Event payload specification
+- `metron/internal/examples/inflightpostflight_README.md` - Aggregation architecture
 
 ---
 

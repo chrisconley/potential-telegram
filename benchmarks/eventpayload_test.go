@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"metering-spec/specs"
+	"github.com/chrisconley/metron/specs"
 )
 
 // Benchmark EventPayloadSpec with minimal data (empty strings)

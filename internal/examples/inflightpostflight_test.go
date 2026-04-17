@@ -2,9 +2,9 @@ package examples
 
 import (
 	"fmt"
-	"metering-spec/internal"
-	"metering-spec/internal/infra"
-	"metering-spec/specs"
+	"github.com/chrisconley/metron/internal"
+	"github.com/chrisconley/metron/internal/infra"
+	"github.com/chrisconley/metron/specs"
 	"testing"
 	"time"
 

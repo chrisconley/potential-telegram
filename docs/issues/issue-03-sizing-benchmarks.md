@@ -298,7 +298,7 @@ $ go test ./benchmarks/ -v -short
 --- PASS: TestScaleCalculations (0.00s)
 
 PASS
-ok  	metering-spec/benchmarks	0.221s
+ok  	metron/benchmarks	0.221s
 ```
 
 ---

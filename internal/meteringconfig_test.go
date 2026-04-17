@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"metering-spec/specs"
+	"github.com/chrisconley/metron/specs"
 	"testing"
 	"time"
 
