@@ -1,7 +1,7 @@
 # Open Issues Analysis
 
 **Analysis Date:** 2026-01-28 (Updated)
-**Repository:** metering-spec
+**Repository:** metron
 **Total Open Issues:** 4 (1 closed, 1 in PR review)
 
 ---

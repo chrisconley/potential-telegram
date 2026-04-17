@@ -191,7 +191,7 @@ Algorithm:
 
 **Correct answer: 12.32 seats** (not 12.5)
 
-### metering-spec's Approach
+### metron's Approach
 
 The [`Aggregate`](../../specs/aggregate.go) function signature captures this requirement:
 
@@ -269,11 +269,11 @@ type Aggregate func(
 
 **Adopt:** Explicit distinction between counters and gauges
 
-**metering-spec aggregation types** (from [`AggregateConfigSpec`](../../specs/aggregate.go)):
+**metron aggregation types** (from [`AggregateConfigSpec`](../../specs/aggregate.go)):
 - Counter aggregations: `sum`, `max`, `min`, `latest`
 - Gauge aggregations: `time-weighted-avg`, `max`, `min`, `latest`
 
-Aggregation names encode the semantic operation (not just implementation), mirroring OpenTelemetry's Counter vs UpDownCounter distinction. See [issue #5](https://github.com/chrisconley/potential-telegram/issues/5) for a proposed change to make counter vs gauge intent explicit in the aggregation name itself (e.g., `sum-events` vs `peak-state`).
+Aggregation names encode the semantic operation (not just implementation), mirroring OpenTelemetry's Counter vs UpDownCounter distinction. See [issue #5](https://github.com/chrisconley/metron/issues/5) for a proposed change to make counter vs gauge intent explicit in the aggregation name itself (e.g., `sum-events` vs `peak-state`).
 
 ### ✅ 2. Dimensional/Label Model
 
@@ -297,7 +297,7 @@ Aggregation names encode the semantic operation (not just implementation), mirro
 - Common attributes: `service.name`, `http.method`, `db.system`
 - Units in metadata, not names
 
-**metering-spec mapping:**
+**metron mapping:**
 - Quantities as decimal strings with explicit unit on each [`ObservationSpec`](../../specs/observation.go)
 - Per-meter schemas: [`MeteringConfigSpec`](../../specs/meteringconfig.go) with `ObservationExtractionSpec`
 - `EventPayload.Properties` → extracted observations + remaining dimensions
@@ -463,7 +463,7 @@ All these systems provide **higher-level products** (billing platforms) rather t
 2. **Time-weighted averages are critical**
    - Observability: `avg_over_time()` is arithmetic mean (not time-weighted)
    - Metering: Must use step interpolation for gauge aggregations
-   - metering-spec's `time-weighted-avg` is correct; most observability systems are not
+   - metron's `time-weighted-avg` is correct; most observability systems are not
 
 3. **Adopt useful patterns**
    - Metric type taxonomy (counter vs gauge)
@@ -522,7 +522,7 @@ All these systems provide **higher-level products** (billing platforms) rather t
 - [UniBee](https://unibee.dev/)
 - [TechCrunch: OpenMeter makes it easier for companies to track usage-based billing](https://techcrunch.com/2024/03/12/openmeter-makes-it-easier-for-companies-to-track-usage-based-billing/)
 
-### metering-spec
+### metron
 
 - [`specs/aggregate.go`](../../specs/aggregate.go) - Aggregation types and time-weighted average interface
 - [`specs/observation.go`](../../specs/observation.go) - Observation spec with decimal string quantities

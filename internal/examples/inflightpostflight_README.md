@@ -65,7 +65,7 @@ Both subscribe to the same raw `MeterRecorded` events but operate independently 
 ## Running the Example
 
 ```bash
-cd metering-spec/internal/examples
+cd metron/internal/examples
 go test -v -run TestHighThroughputMeteringPipeline
 ```
 

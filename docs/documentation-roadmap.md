@@ -16,7 +16,7 @@ This document outlines the documentation strategy to make this a top-tier open s
 These are blocking adoption. Without them, users can't get started.
 
 #### 1. README.md (20 minutes, critical)
-**Location:** Root of metering-spec/
+**Location:** Root of metron/
 **Purpose:** Landing page that answers "what is this and why should I care?"
 
 **Must include:**
@@ -60,7 +60,7 @@ With brief explanation of each stage. ASCII art or Mermaid diagram acceptable.
 **Target audience:** Architects evaluating the spec
 
 #### 4. LICENSE (5 minutes, legally required)
-**Location:** Root of metering-spec/
+**Location:** Root of metron/
 **Purpose:** Legal clarity for open source usage
 
 **Recommendation:** MIT or Apache 2.0 (most permissive, common for specs)
@@ -133,7 +133,7 @@ These enable developers to use the spec correctly.
 These enable community contributions and evolution.
 
 #### 8. CONTRIBUTING.md (30 minutes)
-**Location:** Root of metering-spec/
+**Location:** Root of metron/
 **Purpose:** How to contribute to the spec
 
 **Should cover:**
@@ -186,7 +186,7 @@ These enable community contributions and evolution.
 - Precision handling (Decimal libraries)
 
 #### 12. CHANGELOG.md (ongoing)
-**Location:** Root of metering-spec/
+**Location:** Root of metron/
 **Purpose:** Track version history
 
 **Start when:** First versioned release (v0.1.0)

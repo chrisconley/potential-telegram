@@ -1,4 +1,4 @@
-module metering-spec
+module github.com/chrisconley/metron
 
 go 1.25.0
 

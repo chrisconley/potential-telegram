@@ -186,7 +186,7 @@ package internal
 
 import (
 	"fmt"
-	"metering-spec/specs"
+	"metron/specs"
 	"time"
 )
 
@@ -810,11 +810,11 @@ To eliminate unbundling would require redesigning aggregation to iterate over Ob
 ### Test Coverage
 
 All tests passing throughout migration:
-- `metering-spec/benchmarks` ✓
-- `metering-spec/internal` ✓
-- `metering-spec/internal/examples` ✓
-- `metering-spec/internal/infra` ✓
-- `metering-spec/specs` ✓
+- `metron/benchmarks` ✓
+- `metron/internal` ✓
+- `metron/internal/examples` ✓
+- `metron/internal/infra` ✓
+- `metron/specs` ✓
 
 ### Success Criteria Met
 
