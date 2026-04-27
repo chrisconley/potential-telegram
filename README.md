@@ -1,269 +1,249 @@
 # metron
 
-Data contracts and a Go reference implementation for metering — the part of billing that answers "how much did each customer use?"
+A metering specification for usage-based billing systems, with a Go reference implementation. Defines the pipeline from raw events to billable readings: idempotent metering, time-weighted gauge aggregation, two-dimensional tenant isolation. No pricing engine, no invoicing, no payment orchestration.
 
-> Pre-1.0. The core pipeline works and is tested. The data contracts are actively evolving. Expect breaking changes.
+[![Go Reference](https://pkg.go.dev/badge/github.com/chrisconley/metron.svg)](https://pkg.go.dev/github.com/chrisconley/metron)
 
-That question is harder than it sounds. Your API emits events with a bag of properties (`input_tokens`, `output_tokens`, `model`, `region`). Some are quantities you bill for. Others are dimensions you filter by. Different event types need different extraction rules.
+> [!WARNING]
+> **Pre-1.0.** The data model and the two core operations (`Meter`, `Aggregate`) are stable and exercised by the test suite, but field names and the wire format may still change before `v1.0.0`.
 
-Then aggregation gets interesting. Some customers are metered by total usage (sum), others by peak concurrent usage (max), others by average seat count weighted across the billing period. If a customer had 10 seats for 20 days then 15 seats for 10 days, the time-weighted average is 11.67 — not 12.5. Every number has to be exact: no floating-point drift in financial calculations.
+## The problem
 
-This is a spec and a reference implementation, not a platform you deploy. It defines data shapes and pure functions for the metering pipeline: take raw events in, get billable quantities out. You own the infrastructure.
+Recurring failures in usage-based billing pipelines:
 
-## Try it
+- **A seat-count gauge gets averaged as a flat arithmetic mean.** A customer held 10 seats for 25 days, then 15 for 5; you bill `(10 + 15) / 2 = 12.5` seat-months. The right number is `(10 × 25 + 15 × 5) / 30 ≈ 10.83`. Prometheus's `avg_over_time` does the wrong one — fine for dashboards, wrong for invoices.
+- **Replaying yesterday's metering creates duplicate charges.** A bugfix means re-running the pipeline; the rerun emits new record IDs and the same usage gets billed twice.
+- **A gauge that didn't change during the window looks like zero usage.** No "seat count changed" events arrived this month, so the aggregator emits zero instead of carrying state forward from the last reading.
+- **Test events hit the production billing pipeline.** A staging load test shares the same Kafka topic and the same `customer:cust_123` subject as production; a workspace boundary or a separate "universe" would have stopped it.
+- **Aggregations cross units.** One reading ends up summing `tokens` and `compute-hours` because the aggregator only keyed by subject, not by `(subject, unit)`.
 
-```bash
-git clone https://github.com/chrisconley/metron.git
-cd metron
-go run ./examples/hello
+`metron` is the data model and pipeline spec that makes those failures structural rather than recurring. It is the typed boundary between raw events arriving and billable usage being computed — not a billing platform, not a usage-tracking SaaS, not a query engine.
+
+## What's in this repo
+
+`metron` is structured as a **specification plus a reference implementation**:
+
+- **[`specs/`](specs/)** — language-agnostic types using only Go primitives (`string`, `time.Time`, `map[string]string`). This is what you'd port to another language. Two function signatures live here: `Meter` and `Aggregate`.
+- **[`internal/`](internal/)** — Go reference implementation. Domain-driven (value objects, deterministic IDs, decimal arithmetic via [`cockroachdb/apd`](https://github.com/cockroachdb/apd)). Use it as a Go library, or as a working example when implementing the spec elsewhere.
+- **[`examples/hello/`](examples/hello/)** — runnable end-to-end example.
+- **[`design/`](design/)** — ADRs and reference material, including the [ubiquitous language](design/references/ubiquitous-language.md) and the [observability-vs-metering](design/references/observability-vs-metering.md) study.
+
+A spec without a reference implementation is hard to verify; a reference implementation without a spec is hard to port. This repo ships both, with the boundary made explicit so you can take only the part you need.
+
+## Scope
+
+**In scope:** the event-to-record-to-reading pipeline; observation extraction with optional filters; pass-through dimensions; counter and gauge aggregations (`sum`, `max`, `min`, `latest`, `time-weighted-avg`); deterministic record and reading IDs for idempotent processing; workspace and universe tenant isolation; arbitrary-precision decimal quantities serialized as strings; watermarking for incremental aggregation.
+
+**Out of scope:** rate cards and pricing; invoicing, dunning, and payment orchestration; tax computation; subscription lifecycle; an HTTP or gRPC service; a persistence layer; a query language. `metron` answers "given these events and this config, what is this subject's usage over this window?" — and stops there.
+
+**Refused even in scope** — choices `metron` deliberately doesn't make:
+
+- **No mutable records.** A `MeterRecord` is an immutable historical fact; corrections are new records, not edits.
+- **No implicit unit coercion in aggregations.** Records with different units don't combine. A reading is always per-`(subject, unit, window)`.
+- **No floating-point quantities.** Every quantity crosses language and storage boundaries as a decimal string.
+- **No sampling, downsampling, or expiration.** Auditable data is kept; that's an observability feature, not a billing one.
+
+## Install
+
+```sh
+go get github.com/chrisconley/metron
 ```
 
-```
-customer:acme-corp used 11.67 seats (time-weighted-avg) from 2024-01-01 to 2024-01-31
-```
+Requires Go 1.25 or later.
 
-That's the 11.67 from above, computed end-to-end: two gauge events (10 seats at Jan 1, 15 seats at Jan 21) become one billable reading for January. The whole program is one file:
+## Hello world
+
+Two seat-count readings — 10 seats on Jan 1, 15 seats on Jan 21 — billed as a 30-day time-weighted average:
 
 ```go
 package main
 
 import (
-	"fmt"
-	"log"
-	"time"
+    "fmt"
+    "log"
+    "time"
 
-	"github.com/cockroachdb/apd/v3"
-
-	"github.com/chrisconley/metron/internal"
-	"github.com/chrisconley/metron/specs"
+    "github.com/chrisconley/metron/internal"
+    "github.com/chrisconley/metron/specs"
 )
 
 func main() {
-	// Extract the "seats" property as an observation with unit "seats".
-	meteringConfig := specs.MeteringConfigSpec{
-		Observations: []specs.ObservationExtractionSpec{
-			{SourceProperty: "seats", Unit: "seats"},
-		},
-	}
+    // Extract the "seats" property as an observation with unit "seats".
+    // Any other property (region, plan, etc.) flows through as a dimension.
+    meteringConfig := specs.MeteringConfigSpec{
+        Observations: []specs.ObservationExtractionSpec{
+            {SourceProperty: "seats", Unit: "seats"},
+        },
+    }
 
-	// Two gauge events: 10 seats at Jan 1, then 15 seats at Jan 21.
-	events := []specs.EventPayloadSpec{
-		{
-			ID: "evt_1", Type: "subscription.gauge",
-			WorkspaceID: "acme-prod", UniverseID: "production",
-			Subject:    "customer:acme-corp",
-			Time:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-			Properties: map[string]string{"seats": "10"},
-		},
-		{
-			ID: "evt_2", Type: "subscription.gauge",
-			WorkspaceID: "acme-prod", UniverseID: "production",
-			Subject:    "customer:acme-corp",
-			Time:       time.Date(2024, 1, 21, 0, 0, 0, 0, time.UTC),
-			Properties: map[string]string{"seats": "15"},
-		},
-	}
+    // Two gauge events: 10 seats on Jan 1, then 15 seats on Jan 21.
+    events := []specs.EventPayloadSpec{
+        {
+            ID: "evt_1", Type: "subscription.gauge",
+            WorkspaceID: "acme-prod", UniverseID: "production",
+            Subject:    "customer:acme-corp",
+            Time:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+            Properties: map[string]string{"seats": "10"},
+        },
+        {
+            ID: "evt_2", Type: "subscription.gauge",
+            WorkspaceID: "acme-prod", UniverseID: "production",
+            Subject:    "customer:acme-corp",
+            Time:       time.Date(2024, 1, 21, 0, 0, 0, 0, time.UTC),
+            Properties: map[string]string{"seats": "15"},
+        },
+    }
 
-	// Stage 1 — Meter: event → records.
-	var records []specs.MeterRecordSpec
-	for _, event := range events {
-		recs, err := internal.Meter(event, meteringConfig)
-		if err != nil {
-			log.Fatalf("meter: %v", err)
-		}
-		records = append(records, recs...)
-	}
+    // Stage 1 — Meter: event → record.
+    var records []specs.MeterRecordSpec
+    for _, e := range events {
+        recs, err := internal.Meter(e, meteringConfig)
+        if err != nil {
+            log.Fatal(err)
+        }
+        records = append(records, recs...)
+    }
 
-	// Stage 2 — Aggregate: records → one reading over the billing window.
-	reading, err := internal.Aggregate(records, nil, specs.AggregateConfigSpec{
-		Aggregation: "time-weighted-avg",
-		Window: specs.TimeWindowSpec{
-			Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-			End:   time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
-		},
-	})
-	if err != nil {
-		log.Fatalf("aggregate: %v", err)
-	}
+    // Stage 2 — Aggregate: records → one reading over the billing window.
+    reading, err := internal.Aggregate(records, nil, specs.AggregateConfigSpec{
+        Aggregation: "time-weighted-avg",
+        Window: specs.TimeWindowSpec{
+            Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+            End:   time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC),
+        },
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
 
-	// The underlying quantity is exact (11.666…); round to cents for display.
-	value := reading.ComputedValues[0]
-	fmt.Printf("%s used %s %s (%s) from %s to %s\n",
-		reading.Subject, roundCents(value.Quantity), value.Unit, value.Aggregation,
-		reading.Window.Start.Format("2006-01-02"), reading.Window.End.Format("2006-01-02"),
-	)
-}
-
-func roundCents(s string) string {
-	var parsed, rounded apd.Decimal
-	parsed.SetString(s)
-	apd.BaseContext.WithPrecision(34).Quantize(&rounded, &parsed, -2)
-	return rounded.String()
+    v := reading.ComputedValues[0]
+    fmt.Printf("%s: %s %s (%s)\n", reading.Subject, v.Quantity, v.Unit, v.Aggregation)
+    // customer:acme-corp: 11.66666666666666666666666666666667 seats (time-weighted-avg)
 }
 ```
 
-Source: [`examples/hello/main.go`](examples/hello/main.go). The output line is asserted by a test, so it can't drift from the code.
+The customer held 10 seats for 20 days and 15 seats for 10 days. The exact answer is `(10 × 20 + 15 × 10) / 30 = 11.666…`, which `time-weighted-avg` returns at full decimal precision; rounding to invoice cents happens at the display boundary in your decimal library of choice. A naive arithmetic mean of 10 and 15 would give 12.5 — a 7% over-bill that compounds across customers and months.
 
-### Going deeper
+The full source — including a small rounding helper — is in [`examples/hello/main.go`](examples/hello/main.go); `go run ./examples/hello` runs it.
 
-- **[Basic API metering walkthrough](docs/examples/basic-api-metering.md)** — step through each pipeline stage with JSON examples.
-- **Production-style pipeline** — 300 events over 30 seconds through an event bus, multiple aggregators at different time scales, and a rating handler firing threshold alerts. Source: [`internal/examples/`](internal/examples/). Run it: `go test -v ./internal/examples/ -run TestHighThroughputMeteringPipeline`.
+## Core idea: two operations, three types
 
-The Go reference implementation lives in `internal/`. The portable data contracts — language-agnostic Go structs with JSON tags — live in `specs/`, designed to be re-implemented in any language.
+```
+EventPayload  ── Meter ──▶  MeterRecord  ── Aggregate ──▶  MeterReading
+(raw usage)   (+ config)    (typed usage     (+ config,       (one or more
+                            with one or       + window)        ComputedValues
+                            many                               over the window)
+                            Observations)
+```
+
+- **`EventPayload`** is the input boundary. A flexible `map[string]string` carries event-type-specific data: `tokens`, `endpoint`, `region`, whatever you publish.
+- **`MeterRecord`** is the typed result of metering. It carries one or more `Observation`s — each a `(quantity, unit, window)` triple where the window is instant `[T, T]` for gauges or spanning `[T1, T2]` for activity over a period — plus the dimensions that weren't extracted as observations.
+- **`MeterReading`** is the aggregated result over a billing window. It carries one or more `ComputedValue`s — each a `(quantity, unit, aggregation)` triple — so the strategy that produced the value is part of the value.
+
+`Meter` and `Aggregate` are the only two operations. `Meter` is per-event and stateless. `Aggregate` is per-`(subject, unit, window)` and accepts an optional `lastBeforeWindow` record for time-weighted gauges, so a gauge whose state didn't change inside the window still aggregates correctly. Both produce deterministic IDs from their inputs, so replaying yields the same output.
 
 ## Why this design
 
-**No code changes for new billing models.** Extraction rules, filters, units, and aggregation strategies are all configuration. When a new product launches or a pricing model changes, you update a metering config — engineering doesn't touch the pipeline.
+**Observations carry temporal context.** Every observation has a `Window`. Instant for gauge readings (`Start == End`), spanning for activity over a period (`Start < End`). Time-spanning events ("8 compute-hours from 8pm to 4am") and instant gauges ("15 seats at 9:47am") are both first-class without special-casing.
 
-**Any pricing model.** Usage-based billing needs token counts. Seat-based pricing needs time-weighted seat averages. Hybrid models need both. Even flat-rate plans with overage clauses need to know when a customer exceeds their commitment. The metering layer produces quantities; it doesn't know or care which pricing model consumes them.
+**One event, one record, possibly many observations.** An LLM completion event with `input_tokens` and `output_tokens` produces a single `MeterRecord` with two observations bundled inside it. They persist atomically — either both observations land or neither does — and the record's idempotency key is the source event ID. No partial double-billing.
 
-**One event, one record.** All observations extracted from a single event are bundled in one MeterRecord. Persistence is atomic — all observations save together or none do. No partial event data in the pipeline. See [meterrecord-atomicity-analysis.md](design/references/meterrecord-atomicity-analysis.md) for the full design rationale.
+**Aggregations carry their strategy.** `ComputedValue` is `(quantity, unit, aggregation)`, not just `(quantity, unit)`. A reading that says "12.5 seats" is incomplete; one that says "12.5 seats, time-weighted-avg" is auditable. Hierarchical aggregation needs this; so does dispute resolution.
 
-**No schema coordination.** Event properties are untyped strings. Teams add new properties to their events without coordinating across the metering system. The metering config — not the event schema — decides what gets extracted.
+**Two dimensions of isolation.** `WorkspaceID` is the operational boundary — regions, business units, tenants of your platform. `UniverseID` is the data namespace — production vs staging vs simulation. The same `customer:cust_123` in two universes is two distinct billing entities. The model collapses cleanly when you don't need it (`UniverseID = "production"` always) and gives you a real isolation layer when you do.
 
-**Replay-safe.** Pure functions with deterministic IDs. Reprocessing the same events with the same configuration produces identical records. No hidden state, no side effects, no order dependence.
+**Decimal strings for quantities.** A quantity is `"123.456"`, not `float64`. Floating-point representation drifts across languages, precision is implicit, and a metering pipeline that crosses Go, Python, and SQL needs the same value to be the same value at every hop. The reference implementation uses [`cockroachdb/apd`](https://github.com/cockroachdb/apd) internally and never exposes it.
 
-**Exact arithmetic.** All quantities are decimal strings (`"123.45"`, not `123.45`). No floating-point anywhere. The Go implementation uses [`cockroachdb/apd`](https://github.com/cockroachdb/apd) for arbitrary-precision decimal arithmetic.
+**Watermarking is a first-class field.** Every `MeterRecord` has a `MeteredAt` system timestamp distinct from the business `ObservedAt`. Aggregations track `MaxMeteredAt`, so a downstream system can ask "give me readings whose source records were all metered before T" and get a stable answer. Late-arriving events show up as new records with newer `MeteredAt`, not as silent edits to old ones.
 
-**Test and production in one pipeline.** Workspace × universe scoping isolates data without separate infrastructure. Run test events through the same pipeline as production without cross-contamination.
+**Deterministic IDs are computed, not generated.** A `MeterRecord` ID is derived from the source event ID; a `MeterReading` ID is derived from `(subject, unit, window, aggregation)`. Re-running the pipeline produces the same IDs. Idempotent ingestion is "insert if not exists," not "deduplicate after the fact."
 
-## What the pipeline does
+## Why not just…?
 
-Events arrive from your application with a bag of untyped string properties. The pipeline transforms them into billable quantities through a series of configurable steps.
+### Why not Prometheus or OpenTelemetry?
 
-### 1. Accept events with untyped properties
+Observability systems are designed for operational data: sample loss is acceptable, retention is finite, and `avg_over_time` is arithmetic mean. Billing data is auditable: every event must be retained, every aggregation must be exact, and a seat-count gauge needs step-interpolated time weighting. Prometheus's docs say it directly:
 
-```json
-{
-  "id": "evt_abc123",
-  "type": "llm.completion",
-  "subject": "customer:cust_123",
-  "time": "2024-01-15T10:30:00Z",
-  "properties": {
-    "input_tokens": "1250",
-    "output_tokens": "340",
-    "model": "gpt-4",
-    "region": "us-east"
-  }
-}
-```
+> "If you need 100% accuracy, such as for per-request billing, Prometheus is not a good choice."
 
-Properties are `map[string]string`, not a typed schema. This is deliberate. Different products emit different properties without coordinating schema changes across the metering system. The metering config decides what matters — not the event schema.
+The taxonomy translates well — counter vs gauge, dimensions, cardinality concerns — but the storage and aggregation guarantees don't. Observability for monitoring; a metering spec for billing. The full mapping is in [`design/references/observability-vs-metering.md`](design/references/observability-vs-metering.md).
 
-### 2. Filter by property values
+### Why not [OpenMeter](https://github.com/openmeterio/openmeter), [Lago](https://github.com/getlago/lago), or [Kill Bill](https://github.com/killbill/killbill)?
 
-Not every event produces the same observations. A metering config can include filters that match on property values:
+Those are full billing platforms — metering, pricing, invoicing, subscriptions, dunning, payment orchestration. `metron` is the data-model layer that sits underneath. If you want to operate a billing system, pick a platform. If you're building one — or you have an existing system and you want a portable, language-agnostic shape for the metering layer — `metron` is the size of one component inside that platform.
 
-```json
-{
-  "sourceProperty": "request_count",
-  "unit": "premium-requests",
-  "filter": { "property": "tier", "equals": "premium" }
-}
-```
+### Why not roll your own?
 
-This lets you meter the same event type differently based on customer tier, region, product variant, or any other property — through configuration, not code branches.
+Rolling your own metering is the default and a reasonable place to start. After a few iterations, the same pieces show up in every implementation: time-weighted aggregation, deterministic record IDs, watermarking, a way to keep test events from billing customers, a place to put dimensions. `metron` is that converged shape, with the design rationale traced in [`design/`](design/) so you can adapt it instead of re-deriving it.
 
-### 3. Extract quantities and assign units
+## How it compares
 
-The config specifies which properties are quantities and what unit to assign:
+**[OpenMeter](https://github.com/openmeterio/openmeter)** — Apache-2.0, Kafka-based real-time aggregation, AI/API-billing focus, ships with Stripe sync. The closest spiritual peer; OpenMeter is the deployable system, `metron` is the data model. Pick OpenMeter if you want to run metering as a service today; reach for the metron spec when you need a portable shape that isn't tied to a specific deployment.
 
-```json
-{
-  "observations": [
-    { "sourceProperty": "input_tokens", "unit": "input-tokens" },
-    { "sourceProperty": "output_tokens", "unit": "output-tokens" }
-  ]
-}
-```
+**[Lago](https://github.com/getlago/lago)** — open-source usage-based billing platform with subscription management. One layer above; Lago is what you'd build *with* a metering layer like this, plus pricing, invoicing, and payment.
 
-Each extraction parses the string value into an exact decimal, pairs it with a unit, and timestamps it with the event's time. The same source property can map to different units depending on which filter matched — `request_count` becomes `premium-requests` or `standard-requests` based on the customer's tier.
+**[Kill Bill](https://github.com/killbill/killbill)** — long-running JVM billing platform. Same shape as Lago; broader scope, more mature in enterprise contexts.
 
-### 4. Preserve remaining properties as dimensions
+**[CloudEvents](https://github.com/cloudevents/spec)** — event envelope spec. Compatible. CloudEvents tells you how to wrap an event for transport; `metron` tells you how to turn an event into a meter record.
 
-Properties not extracted as quantities (`model`, `region` in the example above) become **dimensions** on the metered record — preserved for filtering and grouping downstream ("show me token usage broken down by model and region").
+**Prometheus / OpenTelemetry** — observability. See above.
 
-The distinction matters: quantities get aggregated (summed, maxed, averaged). Dimensions get preserved (for grouping, filtering, reporting). You don't have to decide up front which properties you'll want to group by later — everything that isn't a quantity is kept.
+## Concepts at a glance
 
-### 5. Aggregate over billing windows
+| Term | What it is |
+|---|---|
+| `EventPayload` | Raw usage activity at the system boundary. Untyped properties map. |
+| `MeterRecord` | Typed result of metering. Carries `Observation`s and pass-through `Dimensions`. |
+| `MeterReading` | Aggregated result over a window. Carries one or more `ComputedValue`s. |
+| `Observation` | `(quantity, unit, window)`. Window is instant `[T, T]` or spanning `[T1, T2]`. |
+| `ComputedValue` | `(quantity, unit, aggregation)`. The aggregation strategy is part of the value. |
+| `Subject` | The billing entity, formatted `"type:id"` (e.g. `"customer:cust_123"`). |
+| `Workspace` | Operational boundary. Owns event schemas and metering configs. |
+| `Universe` | Data namespace within a workspace. Scopes subject identity. |
+| `Aggregation` | One of `sum`, `max`, `min`, `latest`, `time-weighted-avg`. |
+| `MeteringConfig` | What to extract from each event, with optional filters. |
+| `AggregateConfig` | Aggregation function + half-open `[Start, End)` window. |
 
-Observations are combined over a time window using a configured [aggregation strategy](#aggregation-strategies):
+The full vocabulary, with the design rationale for each term, lives in [`design/references/ubiquitous-language.md`](design/references/ubiquitous-language.md).
 
-```json
-{
-  "subject": "customer:cust_123",
-  "computedValues": [
-    { "quantity": "125000", "unit": "input-tokens", "aggregation": "sum" }
-  ],
-  "window": { "start": "2024-01-01T00:00:00Z", "end": "2024-02-01T00:00:00Z" },
-  "recordCount": 100
-}
-```
-
-This is where metron's job ends. The reading says "customer cust_123 used 125,000 input-tokens this month." What that costs is a pricing/rating concern handled elsewhere.
-
-## Who this is for
-
-You're building a system where:
-
-- **Customers are billed based on what they use** — API calls, tokens, compute hours, storage, seats, or any countable resource
-- **Usage events come from multiple sources** with different schemas, and you need a consistent metering layer
-- **Aggregation isn't just "sum"** — you need peak usage (max), time-weighted averages (seat count over a month), or latest-value gauges
-- **Billing periods matter** — you need to window usage into hourly, daily, or monthly buckets for invoicing
-- **Precision matters** — you're doing financial math and can't tolerate floating-point drift
-
-## Scope
-
-Metering-spec handles the **quantity pipeline**: raw events in, billable quantities out. It stops at the boundary where quantities become money.
-
-**In scope:** observation extraction, unit assignment, dimensional filtering, time-windowed aggregation, multi-tenant isolation, exact decimal arithmetic.
-
-**Out of scope:** pricing, rating, tiered rates, overage charges, committed-use discounts, credits, rollover, proration across billing periods, invoicing, payments, revenue recognition.
-
-The boundary is intentional. Pricing logic depends on business rules that change per customer, per contract, per negotiation — "this customer gets a volume discount above 100k tokens" or "roll unused credits into next month." Those computations take metering quantities as *input* but aren't metering themselves. Conflating the two makes both harder to change independently.
-
-The spec does preserve temporal context on observations (both instant events and time-spanning measurements like compute sessions) so that downstream consumers have the information they need for proration and period assignment. See [observation-temporal-context.md](design/observation-temporal-context.md) for the design rationale.
-
-## Aggregation strategies
-
-| Strategy | Use case | Example |
-|----------|----------|---------|
-| **sum** | Cumulative usage | Total API calls, tokens consumed |
-| **max** | Peak usage | Concurrent connections, queue depth |
-| **min** | Minimum in window | Lowest price, minimum inventory |
-| **latest** | Current state | Most recent gauge reading |
-| **time-weighted-avg** | Average over time | Seat count across a billing month |
-
-Time-weighted average treats each observation as a step function. This matters when the value changes mid-period: 10 seats for 20 days then 15 seats for 10 days averages to 11.67, not 12.5 (which is what you'd get from a naive mean of the two values). See [aggregation-types.md](design/aggregation-types.md) for the full design rationale.
-
-## Multi-tenant isolation
-
-Events are scoped by two dimensions:
-
-- **Workspace** — operational boundary (US region, EU region, a business unit). Each workspace owns its event schemas and metering configs.
-- **Universe** — data namespace (production, test, staging, simulation). The same customer ID in different universes is a different billing entity.
-
-This means you can run test data through the same pipeline as production without cross-contamination, or meter the same customer differently in different regions. See [workspace-universe-isolation.md](design/workspace-universe-isolation.md) for the design rationale.
-
-## Repository structure
+## Repository layout
 
 ```
-specs/           Data contracts (language-agnostic Go structs with JSON tags)
-internal/        Go reference implementation (Meter, Aggregate)
-  examples/      Production-style pipeline example
-examples/        Runnable quick-start example
-design/          Architecture decision records
-docs/examples/   Walkthrough guides
-benchmarks/      Performance tests
+specs/                  Language-agnostic spec (primitives only)
+  eventpayload.go       EventPayloadSpec
+  meterrecord.go        MeterRecordSpec
+  meterreading.go       MeterReadingSpec, TimeWindowSpec
+  observation.go        ObservationSpec, ComputedValueSpec
+  meteringconfig.go     MeteringConfigSpec, ObservationExtractionSpec, FilterSpec
+  aggregate.go          AggregateConfigSpec, Aggregate signature
+  meter.go              Meter signature
+
+internal/               Go reference implementation
+  metering.go           Meter — event → records
+  aggregation.go        Aggregate — records → reading
+  meterrecord.go        MeterRecord domain object
+  meterreading.go       MeterReading domain object
+  decimal.go            Decimal value object (apd-backed)
+  ...
+
+examples/hello/         Runnable end-to-end example
+benchmarks/             Pipeline benchmarks
+docs/                   Walkthroughs, examples, FAQ
+design/                 ADRs and reference material
 ```
 
-## Documentation
+## Development
 
-- **[Basic API Metering](docs/examples/basic-api-metering.md)** — step-by-step walkthrough with JSON examples
-- **[Workspace-Universe Isolation](design/workspace-universe-isolation.md)** — why two dimensions, not one
-- **[Observation Temporal Context](design/observation-temporal-context.md)** — instant vs. time-spanning observations
-- **[Aggregation Types](design/aggregation-types.md)** — design rationale for aggregation strategies
+```sh
+go test ./...                      # unit + integration tests
+go run ./examples/hello            # run the hello-world example
+go test ./benchmarks/...           # benchmark suite
+```
+
+## Contributing
+
+Issues and PRs welcome. Spec changes should ground in a use case the reference implementation can demonstrate. Reference-implementation changes should keep the `specs/` layer dependency-free of `apd` or any other decimal library — that boundary is what makes the spec portable.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
