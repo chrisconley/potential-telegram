@@ -25,7 +25,7 @@ Recurring failures in usage-based billing pipelines:
 
 - **[`specs/`](specs/)** — language-agnostic types using only Go primitives (`string`, `time.Time`, `map[string]string`). This is what you'd port to another language. Two function signatures live here: `Meter` and `Aggregate`.
 - **[`internal/`](internal/)** — Go reference implementation. Domain-driven (value objects, deterministic IDs, decimal arithmetic via [`cockroachdb/apd`](https://github.com/cockroachdb/apd)). Use it as a Go library, or as a working example when implementing the spec elsewhere.
-- **[`examples/hello/`](examples/hello/)** — runnable end-to-end example.
+- **[`examples/`](examples/)** — runnable end-to-end examples covering counter sum, time-weighted gauge, bundled observations (atomicity), conditional metering, and time-spanning observations. See [`examples/README.md`](examples/README.md) for the full index.
 - **[`design/`](design/)** — ADRs and reference material, including the [ubiquitous language](design/references/ubiquitous-language.md) and the [observability-vs-metering](design/references/observability-vs-metering.md) study.
 
 A spec without a reference implementation is hard to verify; a reference implementation without a spec is hard to port. This repo ships both, with the boundary made explicit so you can take only the part you need.
@@ -142,6 +142,10 @@ EventPayload  ── Meter ──▶  MeterRecord  ── Aggregate ──▶  M
 
 `Meter` and `Aggregate` are the only two operations. `Meter` is per-event and stateless. `Aggregate` is per-`(subject, unit, window)` and accepts an optional `lastBeforeWindow` record for time-weighted gauges, so a gauge whose state didn't change inside the window still aggregates correctly. Both produce deterministic IDs from their inputs, so replaying yields the same output.
 
+## Where it fits
+
+TODO
+
 ## Why this design
 
 **Observations carry temporal context.** Every observation has a `Window`. Instant for gauge readings (`Start == End`), spanning for activity over a period (`Start < End`). Time-spanning events ("8 compute-hours from 8pm to 4am") and instant gauges ("15 seats at 9:47am") are both first-class without special-casing.
@@ -226,7 +230,12 @@ internal/               Go reference implementation
   decimal.go            Decimal value object (apd-backed)
   ...
 
-examples/hello/         Runnable end-to-end example
+examples/               Runnable end-to-end examples — see examples/README.md
+  hello/                  time-weighted gauge (the README quick-start)
+  api-calls/              counter sum
+  llm-tokens/             bundled observations, atomicity
+  conditional-tier/       conditional metering with filters
+  compute-session/        time-spanning observations
 benchmarks/             Pipeline benchmarks
 docs/                   Walkthroughs, examples, FAQ
 design/                 ADRs and reference material
