@@ -1,0 +1,24 @@
+name: Test (docs-only)
+
+# Companion to test.yml. Produces a `test` status check for PRs whose changes
+# are entirely in paths ignored by test.yml, so the required `test` check on
+# main can be satisfied without running the Go test suite on docs-only PRs.
+#
+# Behavior by PR content:
+#   - Only ignored paths  → test.yml skipped, this workflow runs → `test` ✅
+#   - Only non-ignored    → test.yml runs, this workflow skipped  → `test` ✅/❌
+#   - Mixed               → both run, both must pass              → `test` ✅/❌
+
+on:
+  pull_request:
+    paths:
+      - '**.md'
+      - 'docs/**'
+      - 'arch/**'
+      - 'design/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only changes — skipping Go test suite."
