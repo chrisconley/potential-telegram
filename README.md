@@ -2,23 +2,6 @@
 
 A metering specification for usage-based billing systems, with a Go reference implementation. Defines the pipeline from raw events to billable readings: idempotent metering, time-weighted gauge aggregation, two-dimensional tenant isolation. No pricing engine, no invoicing, no payment orchestration.
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/chrisconley/metron.svg)](https://pkg.go.dev/github.com/chrisconley/metron)
-
-> [!WARNING]
-> **Pre-1.0.** The data model and the two core operations (`Meter`, `Aggregate`) are stable and exercised by the test suite, but field names and the wire format may still change before `v1.0.0`.
-
-## The problem
-
-Recurring failures in usage-based billing pipelines:
-
-- **A seat-count gauge gets averaged as a flat arithmetic mean.** A customer held 10 seats for 25 days, then 15 for 5; you bill `(10 + 15) / 2 = 12.5` seat-months. The right number is `(10 × 25 + 15 × 5) / 30 ≈ 10.83`. Prometheus's `avg_over_time` does the wrong one — fine for dashboards, wrong for invoices.
-- **Replaying yesterday's metering creates duplicate charges.** A bugfix means re-running the pipeline; the rerun emits new record IDs and the same usage gets billed twice.
-- **A gauge that didn't change during the window looks like zero usage.** No "seat count changed" events arrived this month, so the aggregator emits zero instead of carrying state forward from the last reading.
-- **Test events hit the production billing pipeline.** A staging load test shares the same Kafka topic and the same `customer:cust_123` subject as production; a workspace boundary or a separate "universe" would have stopped it.
-- **Aggregations cross units.** One reading ends up summing `tokens` and `compute-hours` because the aggregator only keyed by subject, not by `(subject, unit)`.
-
-`metron` is the data model and pipeline spec that makes those failures structural rather than recurring. It is the typed boundary between raw events arriving and billable usage being computed — not a billing platform, not a usage-tracking SaaS, not a query engine.
-
 ## What's in this repo
 
 `metron` is structured as a **specification plus a reference implementation**:
@@ -28,25 +11,16 @@ Recurring failures in usage-based billing pipelines:
 - **[`examples/`](examples/)** — runnable end-to-end examples covering counter sum, time-weighted gauge, bundled observations (atomicity), conditional metering, and time-spanning observations. See [`examples/README.md`](examples/README.md) for the full index.
 - **[`design/`](design/)** — ADRs and reference material, including the [ubiquitous language](design/references/ubiquitous-language.md) and the [observability-vs-metering](design/references/observability-vs-metering.md) study.
 
-A spec without a reference implementation is hard to verify; a reference implementation without a spec is hard to port. This repo ships both, with the boundary made explicit so you can take only the part you need.
-
 ## Scope
 
 **In scope:** the event-to-record-to-reading pipeline; observation extraction with optional filters; pass-through dimensions; counter and gauge aggregations (`sum`, `max`, `min`, `latest`, `time-weighted-avg`); deterministic record and reading IDs for idempotent processing; workspace and universe tenant isolation; arbitrary-precision decimal quantities serialized as strings; watermarking for incremental aggregation.
 
 **Out of scope:** rate cards and pricing; invoicing, dunning, and payment orchestration; tax computation; subscription lifecycle; an HTTP or gRPC service; a persistence layer; a query language. `metron` answers "given these events and this config, what is this subject's usage over this window?" — and stops there.
 
-**Refused even in scope** — choices `metron` deliberately doesn't make:
-
-- **No mutable records.** A `MeterRecord` is an immutable historical fact; corrections are new records, not edits.
-- **No implicit unit coercion in aggregations.** Records with different units don't combine. A reading is always per-`(subject, unit, window)`.
-- **No floating-point quantities.** Every quantity crosses language and storage boundaries as a decimal string.
-- **No sampling, downsampling, or expiration.** Auditable data is kept; that's an observability feature, not a billing one.
-
 ## Install
 
 ```sh
-go get github.com/chrisconley/metron
+go get github.com/verocorp/metron
 ```
 
 Requires Go 1.25 or later.
@@ -63,8 +37,8 @@ import (
     "log"
     "time"
 
-    "github.com/chrisconley/metron/internal"
-    "github.com/chrisconley/metron/specs"
+    "github.com/chrisconley/verocorp/internal"
+    "github.com/chrisconley/verocorp/specs"
 )
 
 func main() {
